@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:17
+    container_name: invoiceai-db
+    environment:
+      POSTGRES_USER: invoiceai
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: invoiceai
+    ports:
+      - "5432:5432"
+    volumes:
+      - invoiceai-data:/var/lib/postgresql/data
+  mail:
+    image: rnwood/smtp4dev
+    container_name: invoiceai-mail
+    ports:
+      - "3000:80"
+      - "2525:25"
+volumes:
+  invoiceai-data:

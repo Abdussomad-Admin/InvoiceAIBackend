@@ -1,0 +1,122 @@
+using Application.Common;
+using Application.Common.Interfaces;
+using Domain.Organizations;
+using Host;
+using Host.Authorization;
+using Infrastructure;
+using Infrastructure.Auth;
+using Infrastructure.Email;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+
+var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("Default");
+if (string.IsNullOrWhiteSpace(connectionString))
+    throw new InvalidOperationException(
+        "Connection string 'Default' is missing. Set ConnectionStrings__Default when deployed.");
+
+var jwt = builder.Configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
+if (string.IsNullOrWhiteSpace(jwt.Key) || jwt.Key.Length < 32)
+    throw new InvalidOperationException(
+        "Jwt:Key must be at least 32 characters. Set the Jwt__Key environment variable when deployed.");
+if (!builder.Environment.IsDevelopment() && jwt.Key.StartsWith("local-development", StringComparison.Ordinal))
+    throw new InvalidOperationException("The local development JWT key must not be used outside Development.");
+
+var emailSettings = builder.Configuration.GetSection("Email").Get<EmailSettings>() ?? new EmailSettings();
+
+builder.Services.AddInfrastructure(connectionString, jwt, emailSettings);
+
+builder.Services.AddOpenApi(options => options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
+
+builder.Services.AddSingleton(new AppLinkSettings(
+    builder.Configuration["App:FrontendBaseUrl"] ?? "http://localhost:5173"));
+
+// CORS: only the origins listed in configuration may call the API from a browser.
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+                     ?? Array.Empty<string>();
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+{
+    if (allowedOrigins.Length > 0)
+        policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+}));
+
+// Rate limit sensitive endpoints: 10 requests per minute per IP address.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+});
+
+// Register every class ending in "Handler" from the Application project.
+foreach (var type in typeof(Application.Auth.RegisterHandler).Assembly.GetTypes()
+             .Where(t => t is { IsClass: true, IsAbstract: false } && t.Name.EndsWith("Handler")))
+{
+    builder.Services.AddScoped(type);
+}
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentOrganization, HttpContextCurrentOrganization>();
+builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwt.Issuer,
+            ValidateAudience = true,
+            ValidAudience = jwt.Audience,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30)
+        };
+    });
+
+// One policy per permission, named after the permission (for example "ManageCustomers").
+builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddAuthorization(options =>
+{
+    foreach (var permission in Enum.GetValues<Permission>())
+    {
+        options.AddPolicy(permission.ToString(), policy =>
+            policy.RequireAuthenticatedUser().AddRequirements(new PermissionRequirement(permission)));
+    }
+});
+
+builder.Services.AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
+var app = builder.Build();
+
+if (app.Environment.IsProduction() && !emailSettings.UseSmtp && !emailSettings.UseBrevo)
+    app.Logger.LogWarning(
+        "No real email provider is configured. Emails, including secret links, are only written to the log.");
+
+app.UseExceptionHandler();
+app.UseHttpsRedirection();
+
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
+{
+    app.MapOpenApi();
+    app.UseSwaggerUI(options => options.SwaggerEndpoint("/openapi/v1.json", "Invoice AI v1"));
+}
+
+app.UseCors();
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
