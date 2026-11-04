@@ -9,8 +9,7 @@ public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<App
 {
     public AppDbContext CreateDbContext(string[] args)
     {
-        // Used only by migration commands (Add-Migration, Update-Database).
-        // Defaults to your LOCAL database; set ConnectionStrings__Default to target another one.
+        // Used only by migration commands. Defaults to your LOCAL database.
         var connectionString =
             Environment.GetEnvironmentVariable("ConnectionStrings__Default")
             ?? "Host=localhost;Port=5432;Database=invoiceai;Username=invoiceai;Password=devpassword";
@@ -19,11 +18,16 @@ public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<App
             .UseNpgsql(connectionString)
             .Options;
 
-        return new AppDbContext(options, new DesignTimeCurrentOrganization());
+        return new AppDbContext(options, new DesignTimeCurrentOrganization(), new DesignTimeCurrentUser());
     }
 
     private sealed class DesignTimeCurrentOrganization : ICurrentOrganization
     {
         public Guid? OrganizationId => null;
+    }
+
+    private sealed class DesignTimeCurrentUser : ICurrentUser
+    {
+        public Guid? UserId => null;
     }
 }

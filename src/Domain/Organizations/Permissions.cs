@@ -5,10 +5,12 @@ public enum Permission
     ViewData,
     ManageCustomers,
     ManageInvoices,
+    IssueInvoices,
     RecordPayments,
     ViewReports,
     ManageMembers,
-    ManageOrganization
+    ManageOrganization,
+    ViewAuditLog
 }
 
 public static class RolePermissions
@@ -27,7 +29,7 @@ public static class RolePermissions
         };
         var accountant = new HashSet<Permission>(staff)
         {
-            Permission.RecordPayments, Permission.ViewReports
+            Permission.IssueInvoices, Permission.RecordPayments, Permission.ViewReports
         };
 
         return new Dictionary<OrganizationRole, HashSet<Permission>>

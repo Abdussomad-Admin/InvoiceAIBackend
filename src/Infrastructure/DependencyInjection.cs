@@ -1,6 +1,7 @@
 ﻿using Application.Auth;
 using Application.Common.Interfaces;
 using Application.Customers;
+using Application.Invoices;
 using Application.Organizations;
 using Application.Users;
 using Infrastructure.Auth;
@@ -9,6 +10,9 @@ using Infrastructure.Persistence;
 using Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Application.Audit;
+using Application.Payments;
+using Application.Reports;
 
 namespace Infrastructure;
 
@@ -44,6 +48,16 @@ public static class DependencyInjection
 
         services.AddScoped<IInvitationRepository, InvitationRepository>();
         services.AddScoped<ITenantWriteBypass>(sp => sp.GetRequiredService<AppDbContext>());
+
+        services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+        services.AddScoped<IInvoiceNumberGenerator, InvoiceNumberGenerator>();
+        services.AddScoped<ITransactionRunner>(sp => sp.GetRequiredService<AppDbContext>());
+
+        services.AddScoped<IPaymentRepository, PaymentRepository>();
+        services.AddScoped<IReceivablesRepository, ReceivablesRepository>();
+        services.AddScoped<IAuditRepository, AuditRepository>();
+
+        services.AddScoped<IDashboardRepository, DashboardRepository>();
 
         emailSettings.Validate();
         services.AddSingleton(emailSettings);
