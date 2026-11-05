@@ -15,6 +15,7 @@ public class InvoicesController(
     IssueInvoiceHandler issue,
     VoidInvoiceHandler voidInvoice,
     GetInvoiceHandler get,
+    GetInvoicePdfHandler pdf,
     ListInvoicesHandler list) : ControllerBase
 {
     [HttpGet]
@@ -29,6 +30,14 @@ public class InvoicesController(
     [Authorize(Policy = nameof(Permission.ViewData))]
     public async Task<ActionResult<InvoiceDto>> GetById(Guid id, CancellationToken ct)
         => Ok(await get.Handle(id, ct));
+
+    [HttpGet("{id:guid}/pdf")]
+    [Authorize(Policy = nameof(Permission.ViewData))]
+    public async Task<IActionResult> Pdf(Guid id, CancellationToken ct)
+    {
+        var file = await pdf.Handle(id, ct);
+        return File(file.Content, "application/pdf", file.FileName);
+    }
 
     [HttpPost]
     [Authorize(Policy = nameof(Permission.ManageInvoices))]

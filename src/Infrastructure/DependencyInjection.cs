@@ -1,18 +1,19 @@
-﻿using Application.Auth;
+﻿using Application.Audit;
+using Application.Auth;
 using Application.Common.Interfaces;
 using Application.Customers;
 using Application.Invoices;
 using Application.Organizations;
+using Application.Payments;
+using Application.Reports;
 using Application.Users;
 using Infrastructure.Auth;
 using Infrastructure.Email;
+using Infrastructure.Pdf;
 using Infrastructure.Persistence;
 using Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Application.Audit;
-using Application.Payments;
-using Application.Reports;
 
 namespace Infrastructure;
 
@@ -58,6 +59,8 @@ public static class DependencyInjection
         services.AddScoped<IAuditRepository, AuditRepository>();
 
         services.AddScoped<IDashboardRepository, DashboardRepository>();
+
+        services.AddSingleton<IInvoicePdfRenderer, QuestPdfInvoiceRenderer>();
 
         emailSettings.Validate();
         services.AddSingleton(emailSettings);
