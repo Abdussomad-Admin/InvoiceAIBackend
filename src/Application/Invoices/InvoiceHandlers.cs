@@ -46,12 +46,13 @@ internal static class InvoiceLookups
 internal static class InvoiceMapping
 {
     public static InvoiceDto ToDto(this Invoice i, string customerName, DateOnly today) => new(
-        i.Id, i.Number, i.CustomerId, customerName, i.CurrencyCode, i.Status, i.IssueDate, i.DueDate,
-        i.PaymentTermsDays, i.Notes, i.Subtotal, i.DiscountTotal, i.TaxTotal, i.Total,
-        i.AmountPaid, i.Balance, i.IsOverdue(today), i.DaysOverdue(today), i.VoidReason,
-        i.Lines.OrderBy(l => l.Position).Select(l => new InvoiceLineDto(
-            l.Position, l.Description, l.Quantity, l.UnitPrice, l.DiscountPercent, l.TaxRatePercent,
-            l.LineSubtotal, l.DiscountAmount, l.TaxAmount, l.LineTotal)).ToList());
+    i.Id, i.Number, i.CustomerId, customerName, i.CurrencyCode, i.Status, i.IssueDate, i.DueDate,
+    i.PaymentTermsDays, i.Notes, i.Subtotal, i.DiscountTotal, i.TaxTotal, i.Total,
+    i.AmountPaid, i.Balance, i.IsOverdue(today), i.DaysOverdue(today), i.VoidReason,
+    i.Lines.OrderBy(l => l.Position).Select(l => new InvoiceLineDto(
+        l.Position, l.Description, l.Quantity, l.UnitPrice, l.DiscountPercent, l.TaxRatePercent,
+        l.LineSubtotal, l.DiscountAmount, l.TaxAmount, l.LineTotal)).ToList(),
+    i.LastSentAt, i.SentCount);
 }
 
 public sealed class CreateInvoiceHandler(

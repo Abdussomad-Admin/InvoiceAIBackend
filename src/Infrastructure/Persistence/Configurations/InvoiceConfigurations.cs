@@ -15,6 +15,7 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         builder.Property(i => i.Id).ValueGeneratedNever();
 
         builder.Property(i => i.Number).HasMaxLength(50);
+        builder.Property(c => c.LastSentTo).HasMaxLength(254);
         builder.Property(i => i.CurrencyCode).IsRequired().HasMaxLength(3).IsFixedLength();
         builder.Property(i => i.Status).HasConversion<string>().IsRequired().HasMaxLength(30);
         builder.Property(i => i.Notes).HasMaxLength(2000);
@@ -79,6 +80,7 @@ public class InvoiceCounterConfiguration : IEntityTypeConfiguration<InvoiceCount
         builder.HasKey(c => c.OrganizationId);
         builder.Property(c => c.OrganizationId).ValueGeneratedNever();
         builder.Property(c => c.LastNumber).IsRequired();
+
 
         builder.HasOne<Organization>().WithMany().HasForeignKey(c => c.OrganizationId)
             .OnDelete(DeleteBehavior.Restrict);

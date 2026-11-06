@@ -60,6 +60,38 @@ public class BrevoEmailSenderTests
     }
 
     [Fact]
+    public async Task Send_IncludesAttachmentsAndReplyTo_AndReportsSuccess()
+    {
+        var handler = new StubHttpHandler(() => new HttpResponseMessage(HttpStatusCode.Created));
+        var sender = Create(handler);
+        var bytes = new byte[] { 1, 2, 3 };
+        var email = new OutgoingEmail(
+            "ada@example.com", "Invoice", "Body",
+            [new EmailAttachment("INV-0001.pdf", "application/pdf", bytes)], "billing@acme.com");
+
+        var sent = await sender.SendAsync(email);
+
+        Assert.True(sent);
+        using var json = JsonDocument.Parse(Assert.Single(handler.Calls).Body);
+        var root = json.RootElement;
+        Assert.Equal("billing@acme.com", root.GetProperty("replyTo").GetProperty("email").GetString());
+        var attachment = root.GetProperty("attachment")[0];
+        Assert.Equal("INV-0001.pdf", attachment.GetProperty("name").GetString());
+        Assert.Equal(Convert.ToBase64String(bytes), attachment.GetProperty("content").GetString());
+    }
+
+    [Fact]
+    public async Task Send_ReportsFailure_WhenBrevoRejectsOrTheNetworkFails()
+    {
+        var rejecting = new StubHttpHandler(() => new HttpResponseMessage(HttpStatusCode.Unauthorized));
+        var failing = new StubHttpHandler(() => throw new HttpRequestException("network down"));
+        var email = new OutgoingEmail("ada@example.com", "Hello", "Body");
+
+        Assert.False(await Create(rejecting).SendAsync(email));
+        Assert.False(await Create(failing).SendAsync(email));
+    }
+
+    [Fact]
     public async Task Send_WhenBrevoRejectsTheRequest_DoesNotThrow()
     {
         var handler = new StubHttpHandler(() => new HttpResponseMessage(HttpStatusCode.Unauthorized)

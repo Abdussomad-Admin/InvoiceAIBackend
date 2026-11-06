@@ -27,7 +27,7 @@ public sealed record InvoiceDto(
     InvoiceStatus Status, DateOnly? IssueDate, DateOnly? DueDate, int PaymentTermsDays, string? Notes,
     decimal Subtotal, decimal DiscountTotal, decimal TaxTotal, decimal Total,
     decimal AmountPaid, decimal Balance, bool IsOverdue, int DaysOverdue, string? VoidReason,
-    IReadOnlyList<InvoiceLineDto> Lines);
+    IReadOnlyList<InvoiceLineDto> Lines, DateTimeOffset? LastSentAt, int SentCount);
 
 public sealed record InvoiceSummaryDto(
     Guid Id, string? Number, Guid CustomerId, string CustomerName, string CurrencyCode,

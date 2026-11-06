@@ -4,6 +4,7 @@ using Domain.Invoices;
 using Domain.Organizations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Host.Controllers;
 
@@ -14,6 +15,7 @@ public class InvoicesController(
     UpdateInvoiceHandler update,
     IssueInvoiceHandler issue,
     VoidInvoiceHandler voidInvoice,
+    SendInvoiceHandler send,
     GetInvoiceHandler get,
     GetInvoicePdfHandler pdf,
     ListInvoicesHandler list) : ControllerBase
@@ -57,6 +59,13 @@ public class InvoicesController(
     public async Task<ActionResult<InvoiceDto>> Issue(
         Guid id, [FromBody] IssueInvoiceCommand? command, CancellationToken ct)
         => Ok(await issue.Handle(id, command?.DueDate, ct));
+
+    [HttpPost("{id:guid}/send")]
+    [EnableRateLimiting("auth")]
+    [Authorize(Policy = nameof(Permission.IssueInvoices))]
+    public async Task<ActionResult<SendInvoiceResult>> Send(
+        Guid id, [FromBody] SendInvoiceCommand? command, CancellationToken ct)
+        => Ok(await send.Handle(id, command ?? new SendInvoiceCommand(null), ct));
 
     [HttpPost("{id:guid}/void")]
     [Authorize(Policy = nameof(Permission.IssueInvoices))]

@@ -9,17 +9,25 @@ public sealed class BrevoEmailSender(
 {
     private const string Endpoint = "https://api.brevo.com/v3/smtp/email";
 
-    public async Task SendAsync(OutgoingEmail email, CancellationToken cancellationToken = default)
+    public async Task<bool> SendAsync(OutgoingEmail email, CancellationToken cancellationToken = default)
     {
         try
         {
-            var payload = new
+            var payload = new Dictionary<string, object?>
             {
-                sender = new { name = settings.FromName, email = settings.FromAddress },
-                to = new[] { new { email = email.To } },
-                subject = email.Subject,
-                htmlContent = EmailHtml.FromPlainText(email.Body)
+                ["sender"] = new { name = settings.FromName, email = settings.FromAddress },
+                ["to"] = new[] { new { email = email.To } },
+                ["subject"] = email.Subject,
+                ["htmlContent"] = EmailHtml.FromPlainText(email.Body)
             };
+
+            if (!string.IsNullOrWhiteSpace(email.ReplyTo))
+                payload["replyTo"] = new { email = email.ReplyTo };
+
+            if (email.Attachments is { Count: > 0 } attachments)
+                payload["attachment"] = attachments
+                    .Select(a => new { name = a.FileName, content = Convert.ToBase64String(a.Content) })
+                    .ToArray();
 
             using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint)
             {
@@ -33,7 +41,7 @@ public sealed class BrevoEmailSender(
             if (response.IsSuccessStatusCode)
             {
                 logger.LogInformation("Email sent with subject {Subject}", email.Subject);
-                return;
+                return true;
             }
 
             var detail = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -41,6 +49,7 @@ public sealed class BrevoEmailSender(
             logger.LogError(
                 "Brevo rejected the email with subject {Subject}: HTTP {Status} {Detail}",
                 email.Subject, (int)response.StatusCode, detail);
+            return false;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -48,7 +57,9 @@ public sealed class BrevoEmailSender(
         }
         catch (Exception ex)
         {
+            // Not rethrown (see SmtpEmailSender). Never log the body: it can hold secret links.
             logger.LogError(ex, "Failed to send email with subject {Subject}", email.Subject);
+            return false;
         }
     }
 }

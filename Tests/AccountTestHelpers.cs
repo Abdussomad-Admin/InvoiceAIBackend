@@ -11,10 +11,10 @@ public sealed class CapturingEmailSender : IEmailSender
 {
     public List<OutgoingEmail> Sent { get; } = [];
 
-    public Task SendAsync(OutgoingEmail email, CancellationToken cancellationToken = default)
+    public Task<bool> SendAsync(OutgoingEmail email, CancellationToken cancellationToken = default)
     {
         Sent.Add(email);
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 
     public string LastTokenFor(string toEmail)

@@ -16,6 +16,7 @@ namespace Host
                 ConflictException => (StatusCodes.Status409Conflict, "Conflict", exception.Message),
                 AuthenticationFailedException => (StatusCodes.Status401Unauthorized, "Authentication failed", exception.Message),
                 NotFoundException => (StatusCodes.Status404NotFound, "Not found", exception.Message),
+                EmailDeliveryException => (StatusCodes.Status502BadGateway, "Email not sent", exception.Message),
                 _ => (StatusCodes.Status500InternalServerError, "Server error", "An unexpected error occurred.")
             };
 

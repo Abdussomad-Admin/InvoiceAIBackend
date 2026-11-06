@@ -29,6 +29,10 @@ public sealed class Invoice : BaseEntity, ITenantOwned
     public DateTimeOffset? VoidedAt { get; private set; }
     public string? VoidReason { get; private set; }
 
+    public DateTimeOffset? LastSentAt { get; private set; }
+    public string? LastSentTo { get; private set; }
+    public int SentCount { get; private set; }
+
     public IReadOnlyList<InvoiceLine> Lines => _lines;
     public decimal Balance => Total - AmountPaid;
 
@@ -129,6 +133,20 @@ public sealed class Invoice : BaseEntity, ITenantOwned
         VoidReason = Guard.NotBlank(reason, nameof(VoidReason), 500);
         VoidedAt = now;
         Status = InvoiceStatus.Void;
+    }
+
+    public void EnsureSendable()
+    {
+        if (Status is InvoiceStatus.Draft or InvoiceStatus.Void)
+            throw new DomainException("Only issued invoices can be sent. Issue the invoice first.");
+    }
+
+    public void MarkSent(string recipient, DateTimeOffset now)
+    {
+        EnsureSendable();
+        LastSentTo = Guard.NotBlank(recipient, nameof(LastSentTo), 254);
+        LastSentAt = now;
+        SentCount++;
     }
 
     // Overdue is calculated from the due date, never stored, so it can't go stale.

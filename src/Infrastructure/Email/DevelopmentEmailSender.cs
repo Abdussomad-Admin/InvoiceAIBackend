@@ -5,11 +5,16 @@ namespace Infrastructure.Email;
 
 public sealed class DevelopmentEmailSender(ILogger<DevelopmentEmailSender> logger) : IEmailSender
 {
-    public Task SendAsync(OutgoingEmail email, CancellationToken cancellationToken = default)
+    public Task<bool> SendAsync(OutgoingEmail email, CancellationToken cancellationToken = default)
     {
+        var attachments = email.Attachments is { Count: > 0 } list
+            ? string.Join(", ", list.Select(a => $"{a.FileName} ({a.Content.Length} bytes)"))
+            : "none";
+
         logger.LogWarning(
-            "DEVELOPMENT EMAIL (not actually sent)\nTo: {To}\nSubject: {Subject}\n{Body}",
-            email.To, email.Subject, email.Body);
-        return Task.CompletedTask;
+            "DEVELOPMENT EMAIL (not actually sent)\nTo: {To}\nSubject: {Subject}\nAttachments: {Attachments}\n{Body}",
+            email.To, email.Subject, attachments, email.Body);
+
+        return Task.FromResult(true);
     }
 }

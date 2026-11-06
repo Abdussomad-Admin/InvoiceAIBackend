@@ -161,6 +161,11 @@ public class AppDbContext(
                             $"{status.OriginalValue} -> {status.CurrentValue}{number}{reason}");
                     }
 
+                    var sent = entry.Property(nameof(Invoice.SentCount));
+                    if (Changed(sent))
+                        return new(i.OrganizationId, "Invoice.Sent", "Invoice", i.Id,
+                            $"Sent to {i.LastSentTo} (send #{i.SentCount})");
+
                     return new(i.OrganizationId, "Invoice.Updated", "Invoice", i.Id, $"Total {Fmt(i.Total)} {i.CurrencyCode}");
                 }
 
