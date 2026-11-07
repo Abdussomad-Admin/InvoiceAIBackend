@@ -1,11 +1,13 @@
 ﻿using Application.Audit;
 using Application.Auth;
+using Application.Bills;
 using Application.Common.Interfaces;
 using Application.Customers;
 using Application.Invoices;
 using Application.Organizations;
 using Application.Payments;
 using Application.Reports;
+using Application.Suppliers;
 using Application.Users;
 using Infrastructure.Auth;
 using Infrastructure.Email;
@@ -61,6 +63,12 @@ public static class DependencyInjection
         services.AddScoped<IDashboardRepository, DashboardRepository>();
 
         services.AddSingleton<IInvoicePdfRenderer, QuestPdfInvoiceRenderer>();
+
+        services.AddScoped<ISupplierRepository, SupplierRepository>();
+        services.AddScoped<IBillRepository, BillRepository>();
+
+        services.AddScoped<IBillPaymentRepository, BillPaymentRepository>();
+        services.AddScoped<IPayablesRepository, PayablesRepository>();
 
         emailSettings.Validate();
         services.AddSingleton(emailSettings);

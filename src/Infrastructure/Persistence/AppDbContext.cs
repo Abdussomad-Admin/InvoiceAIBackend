@@ -1,15 +1,17 @@
-﻿using System.Globalization;
-using System.Reflection;
-using Application.Common.Interfaces;
+﻿using Application.Common.Interfaces;
 using Domain.Audit;
+using Domain.Bills;
 using Domain.Common;
 using Domain.Customers;
 using Domain.Invoices;
 using Domain.Organizations;
 using Domain.Payments;
+using Domain.Suppliers;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using System.Globalization;
+using System.Reflection;
 
 namespace Infrastructure.Persistence;
 
@@ -20,7 +22,10 @@ public class AppDbContext(
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<BillPayment> BillPayments => Set<BillPayment>();
     public DbSet<Membership> Memberships => Set<Membership>();
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<SupplierBill> SupplierBills => Set<SupplierBill>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<UserToken> UserTokens => Set<UserToken>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -213,6 +218,51 @@ public class AppDbContext(
 
             case Organization o:
                 return new(o.Id, "Organization.Updated", "Organization", o.Id, o.Name);
+            case SupplierBill b when added:
+                return new(b.OrganizationId, "Bill.Created", "SupplierBill", b.Id,
+                    $"{b.Number} total {Fmt(b.Total)} {b.CurrencyCode}");
+
+            case Supplier s when added:
+                return new(s.OrganizationId, "Supplier.Created", "Supplier", s.Id, s.Name);
+
+            case Supplier s:
+                {
+                    var archived = entry.Property(nameof(Supplier.IsArchived));
+                    var action = Changed(archived)
+                        ? (s.IsArchived ? "Supplier.Archived" : "Supplier.Restored")
+                        : "Supplier.Updated";
+                    return new(s.OrganizationId, action, "Supplier", s.Id, s.Name);
+                }
+
+            case SupplierBill b:
+                {
+                    var status = entry.Property(nameof(SupplierBill.Status));
+                    var paid = entry.Property(nameof(SupplierBill.AmountPaid));
+
+                    if (Changed(paid))
+                        return new(b.OrganizationId, "Bill.PaymentChanged", "SupplierBill", b.Id,
+                            $"Amount paid {Fmt(paid.OriginalValue)} -> {Fmt(paid.CurrentValue)}; status {status.OriginalValue} -> {status.CurrentValue}");
+
+                    if (Changed(status))
+                    {
+                        var reason = b.Status == BillStatus.Void ? $"; reason: {b.VoidReason}" : "";
+                        return new(b.OrganizationId, "Bill.StatusChanged", "SupplierBill", b.Id,
+                            $"{status.OriginalValue} -> {status.CurrentValue} ({b.Number}){reason}");
+                    }
+
+                    return new(b.OrganizationId, "Bill.Updated", "SupplierBill", b.Id,
+                        $"{b.Number} total {Fmt(b.Total)} {b.CurrencyCode}");
+                }
+
+            case BillPayment p when added:
+                return new(p.OrganizationId, "BillPayment.Recorded", "BillPayment", p.Id,
+                    $"{Fmt(p.Amount)} {p.CurrencyCode} on bill {p.BillId} via {p.Method}");
+
+            case BillPayment p:
+                return Changed(entry.Property(nameof(BillPayment.ReversedAt)))
+                    ? new(p.OrganizationId, "BillPayment.Reversed", "BillPayment", p.Id,
+                        $"{Fmt(p.Amount)} {p.CurrencyCode}; reason: {p.ReversalReason}")
+                    : null;
 
             default:
                 return null;
