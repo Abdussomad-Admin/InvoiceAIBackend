@@ -1,4 +1,5 @@
-﻿using Application.Audit;
+﻿using Application.Assistant;
+using Application.Audit;
 using Application.Auth;
 using Application.Bills;
 using Application.Common.Interfaces;
@@ -9,6 +10,7 @@ using Application.Payments;
 using Application.Reports;
 using Application.Suppliers;
 using Application.Users;
+using Infrastructure.Assistant;
 using Infrastructure.Auth;
 using Infrastructure.Email;
 using Infrastructure.Pdf;
@@ -69,6 +71,15 @@ public static class DependencyInjection
 
         services.AddScoped<IBillPaymentRepository, BillPaymentRepository>();
         services.AddScoped<IPayablesRepository, PayablesRepository>();
+
+        services.AddScoped<IAssistantTool, FinancialSummaryTool>();
+        services.AddScoped<IAssistantTool, YearComparisonTool>();
+        services.AddScoped<IAssistantTool, ExpenseReportTool>();
+        services.AddScoped<IAssistantTool, ReceivablesAgingTool>();
+        services.AddScoped<IAssistantTool, PayablesAgingTool>();
+        services.AddScoped<IAssistantTool, OverdueInvoicesTool>();
+        services.AddScoped<IAssistantTool, BillsDueTool>();
+        services.AddHttpClient<IAssistantModel, GemmaAssistantModel>();
 
         emailSettings.Validate();
         services.AddSingleton(emailSettings);

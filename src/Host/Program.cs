@@ -1,3 +1,4 @@
+using Application.Assistant;
 using Application.Common;
 using Application.Common.Interfaces;
 using Domain.Organizations;
@@ -9,11 +10,11 @@ using Infrastructure.Email;
 using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,6 +31,10 @@ if (!builder.Environment.IsDevelopment() && jwt.Key.StartsWith("local-developmen
     throw new InvalidOperationException("The local development JWT key must not be used outside Development.");
 
 var emailSettings = builder.Configuration.GetSection("Email").Get<EmailSettings>() ?? new EmailSettings();
+
+var assistantSettings = builder.Configuration.GetSection("Assistant").Get<AssistantSettings>() ?? new AssistantSettings();
+assistantSettings.Validate();
+builder.Services.AddSingleton(assistantSettings);
 
 builder.Services.AddInfrastructure(connectionString, jwt, emailSettings);
 
@@ -54,6 +59,14 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("auth", httpContext => RateLimitPartition.GetFixedWindowLimiter(
         httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+
+    options.AddPolicy("assistant", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+    httpContext.User.FindFirst("sub")?.Value ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+    _ => new FixedWindowRateLimiterOptions
+    {
+        PermitLimit = assistantSettings.QuestionsPerHour,
+        Window = TimeSpan.FromHours(1)
+    }));
 });
 
 // Register every class ending in "Handler" from the Application project.
