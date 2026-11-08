@@ -15,7 +15,7 @@ public sealed record MetricDefinitionDto(string Name, string Meaning);
 
 public sealed record DashboardDto(
     DateOnly From, DateOnly To, string CurrencyCode,
-    decimal TotalInvoiced, int InvoiceCount,
+    decimal TotalInvoiced, int InvoiceCount, decimal NetInvoiced, decimal TaxInvoiced,
     decimal TotalCollected, int PaymentCount,
     decimal OutstandingReceivables, int OpenInvoices,
     decimal OverdueReceivables, int OverdueInvoices,
@@ -26,9 +26,11 @@ public sealed record DashboardDto(
 
 public sealed record DatedAmount(DateOnly Date, decimal Amount);
 
+public sealed record SalesRow(DateOnly Date, decimal Net, decimal Tax, decimal Gross);
+
 public interface IDashboardRepository
 {
-    Task<IReadOnlyList<DatedAmount>> GetInvoicedAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SalesRow>> GetSalesAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<DatedAmount>> GetCollectedAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
     Task<IReadOnlyDictionary<InvoiceStatus, int>> GetStatusCountsAsync(CancellationToken cancellationToken = default);
 }

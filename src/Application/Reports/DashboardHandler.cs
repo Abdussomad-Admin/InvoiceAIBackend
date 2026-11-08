@@ -15,11 +15,13 @@ public sealed class GetDashboardHandler(
 {
     private static readonly IReadOnlyList<MetricDefinitionDto> Definitions =
     [
-        new("totalInvoiced", "Sum of totals of invoices issued within the period. Drafts and voided invoices are excluded."),
+        new("totalInvoiced", "Sum of invoice totals, INCLUDING tax, for invoices issued within the period. Drafts and voided invoices are excluded."),
+        new("netInvoiced", "The same invoices, before tax and after discounts. This is the figure that counts as sales income."),
+        new("taxInvoiced", "Tax charged on those invoices."),
         new("totalCollected", "Sum of payments dated within the period. Reversed payments are excluded."),
         new("outstandingReceivables", "Balance still owed on all issued and partially paid invoices right now. Not limited to the period."),
         new("overdueReceivables", "The part of the outstanding balance on invoices whose due date is before today, in the organization's time zone."),
-        new("monthly", "Invoiced amounts are grouped by the month of issue and collected amounts by the month of payment."),
+        new("monthly", "Invoiced amounts (including tax) are grouped by the month of issue and collected amounts by the month of payment."),
         new("topCustomers", "The five customers with the largest outstanding balance right now."),
         new("invoiceStatuses", "All-time number of invoices in each status.")
     ];
@@ -39,7 +41,7 @@ public sealed class GetDashboardHandler(
         if (months.Count > DashboardMath.MaxMonths)
             throw new DomainException($"The date range can span at most {DashboardMath.MaxMonths} months.");
 
-        var invoiced = await dashboard.GetInvoicedAsync(from, to, cancellationToken);
+        var sales = await dashboard.GetSalesAsync(from, to, cancellationToken);
         var collected = await dashboard.GetCollectedAsync(from, to, cancellationToken);
         var open = await receivables.GetOpenInvoicesAsync(null, cancellationToken);
         var statuses = await dashboard.GetStatusCountsAsync(cancellationToken);
@@ -48,12 +50,12 @@ public sealed class GetDashboardHandler(
 
         var monthly = months.Select(month =>
         {
-            var invoicedInMonth = invoiced.Where(x => DashboardMath.MonthKey(x.Date) == month).ToList();
+            var invoicedInMonth = sales.Where(x => DashboardMath.MonthKey(x.Date) == month).ToList();
             var collectedInMonth = collected.Where(x => DashboardMath.MonthKey(x.Date) == month).ToList();
 
             return new MonthlyPointDto(
                 month,
-                invoicedInMonth.Sum(x => x.Amount), invoicedInMonth.Count,
+                invoicedInMonth.Sum(x => x.Gross), invoicedInMonth.Count,
                 collectedInMonth.Sum(x => x.Amount), collectedInMonth.Count);
         }).ToList();
 
@@ -68,7 +70,7 @@ public sealed class GetDashboardHandler(
 
         return new DashboardDto(
             from, to, organization.BaseCurrencyCode,
-            invoiced.Sum(x => x.Amount), invoiced.Count,
+            sales.Sum(x => x.Gross), sales.Count, sales.Sum(x => x.Net), sales.Sum(x => x.Tax),
             collected.Sum(x => x.Amount), collected.Count,
             open.Sum(r => r.Balance), open.Count,
             overdue.Sum(r => r.Balance), overdue.Count,
