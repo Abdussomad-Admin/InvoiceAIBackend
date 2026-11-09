@@ -3,6 +3,7 @@ using Domain.Audit;
 using Domain.Bills;
 using Domain.Common;
 using Domain.Customers;
+using Domain.Documents;
 using Domain.Invoices;
 using Domain.Organizations;
 using Domain.Payments;
@@ -23,6 +24,8 @@ public class AppDbContext(
     public DbSet<User> Users => Set<User>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<BillPayment> BillPayments => Set<BillPayment>();
+    public DbSet<SourceDocument> SourceDocuments => Set<SourceDocument>();
+    public DbSet<DocumentBlob> DocumentBlobs => Set<DocumentBlob>();
     public DbSet<Membership> Memberships => Set<Membership>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<SupplierBill> SupplierBills => Set<SupplierBill>();
@@ -262,6 +265,16 @@ public class AppDbContext(
                 return Changed(entry.Property(nameof(BillPayment.ReversedAt)))
                     ? new(p.OrganizationId, "BillPayment.Reversed", "BillPayment", p.Id,
                         $"{Fmt(p.Amount)} {p.CurrencyCode}; reason: {p.ReversalReason}")
+                    : null;
+
+            case SourceDocument d when added:
+                return new(d.OrganizationId, "Document.Uploaded", "SourceDocument", d.Id,
+                    $"{d.FileName} ({d.SizeBytes} bytes)");
+
+            case SourceDocument d:
+                return Changed(entry.Property(nameof(SourceDocument.Status)))
+                    ? new(d.OrganizationId, $"Document.{d.Status}", "SourceDocument", d.Id,
+                        d.RejectionReason is null ? d.FileName : $"{d.FileName}; reason: {d.RejectionReason}")
                     : null;
 
             default:

@@ -4,6 +4,7 @@ using Application.Auth;
 using Application.Bills;
 using Application.Common.Interfaces;
 using Application.Customers;
+using Application.Documents;
 using Application.Invoices;
 using Application.Organizations;
 using Application.Payments;
@@ -12,6 +13,7 @@ using Application.Suppliers;
 using Application.Users;
 using Infrastructure.Assistant;
 using Infrastructure.Auth;
+using Infrastructure.Documents;
 using Infrastructure.Email;
 using Infrastructure.Pdf;
 using Infrastructure.Persistence;
@@ -80,6 +82,10 @@ public static class DependencyInjection
         services.AddScoped<IAssistantTool, OverdueInvoicesTool>();
         services.AddScoped<IAssistantTool, BillsDueTool>();
         services.AddHttpClient<IAssistantModel, GemmaAssistantModel>();
+
+        services.AddScoped<IDocumentRepository, DocumentRepository>();
+        services.AddScoped<IDocumentStorage, DatabaseDocumentStorage>();
+        services.AddSingleton<IPdfTextExtractor, PdfPigTextExtractor>();
 
         emailSettings.Validate();
         services.AddSingleton(emailSettings);

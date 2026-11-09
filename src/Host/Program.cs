@@ -1,6 +1,7 @@
 using Application.Assistant;
 using Application.Common;
 using Application.Common.Interfaces;
+using Application.Documents;
 using Domain.Organizations;
 using Host;
 using Host.Authorization;
@@ -33,8 +34,15 @@ if (!builder.Environment.IsDevelopment() && jwt.Key.StartsWith("local-developmen
 var emailSettings = builder.Configuration.GetSection("Email").Get<EmailSettings>() ?? new EmailSettings();
 
 var assistantSettings = builder.Configuration.GetSection("Assistant").Get<AssistantSettings>() ?? new AssistantSettings();
+
+
 assistantSettings.Validate();
 builder.Services.AddSingleton(assistantSettings);
+
+var documentSettings = builder.Configuration.GetSection("Documents").Get<DocumentSettings>() ?? new DocumentSettings();
+documentSettings.Validate();
+builder.Services.AddSingleton(documentSettings);
+
 
 builder.Services.AddInfrastructure(connectionString, jwt, emailSettings);
 
@@ -67,6 +75,10 @@ builder.Services.AddRateLimiter(options =>
         PermitLimit = assistantSettings.QuestionsPerHour,
         Window = TimeSpan.FromHours(1)
     }));
+
+    options.AddPolicy("upload", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+    httpContext.User.FindFirst("sub")?.Value ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+    _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
 });
 
 // Register every class ending in "Handler" from the Application project.
