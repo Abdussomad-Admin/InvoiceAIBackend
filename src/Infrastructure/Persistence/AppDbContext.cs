@@ -26,6 +26,7 @@ public class AppDbContext(
     public DbSet<BillPayment> BillPayments => Set<BillPayment>();
     public DbSet<SourceDocument> SourceDocuments => Set<SourceDocument>();
     public DbSet<DocumentBlob> DocumentBlobs => Set<DocumentBlob>();
+    public DbSet<DocumentExtraction> DocumentExtractions => Set<DocumentExtraction>();
     public DbSet<Membership> Memberships => Set<Membership>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<SupplierBill> SupplierBills => Set<SupplierBill>();

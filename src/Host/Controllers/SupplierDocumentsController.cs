@@ -16,7 +16,10 @@ public class SupplierDocumentsController(
     ListDocumentsHandler list,
     GetDocumentHandler get,
     DownloadDocumentHandler download,
-    RejectDocumentHandler reject) : ControllerBase
+    RejectDocumentHandler reject,
+    ExtractDocumentHandler extract,
+    GetExtractionHandler getExtraction,
+    ListExtractionsHandler extractionHistory) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = nameof(Permission.ViewPayables))]
@@ -65,4 +68,21 @@ public class SupplierDocumentsController(
     [Authorize(Policy = nameof(Permission.ManagePayables))]
     public async Task<ActionResult<DocumentDto>> Reject(Guid id, RejectDocumentCommand command, CancellationToken ct)
         => Ok(await reject.Handle(id, command, ct));
+
+    // Sends the document's text or image to the configured AI model. Only happens when someone asks.
+    [HttpPost("{id:guid}/extract")]
+    [EnableRateLimiting("extract")]
+    [Authorize(Policy = nameof(Permission.ManagePayables))]
+    public async Task<ActionResult<ExtractionReviewDto>> Extract(Guid id, CancellationToken ct)
+        => Ok(await extract.Handle(id, ct));
+
+    [HttpGet("{id:guid}/extraction")]
+    [Authorize(Policy = nameof(Permission.ViewPayables))]
+    public async Task<ActionResult<ExtractionReviewDto>> GetExtraction(Guid id, CancellationToken ct)
+        => Ok(await getExtraction.Handle(id, ct));
+
+    [HttpGet("{id:guid}/extractions")]
+    [Authorize(Policy = nameof(Permission.ViewPayables))]
+    public async Task<ActionResult<IReadOnlyList<ExtractionAttemptDto>>> ExtractionHistory(Guid id, CancellationToken ct)
+        => Ok(await extractionHistory.Handle(id, ct));
 }

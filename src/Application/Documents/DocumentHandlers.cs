@@ -15,7 +15,8 @@ internal static class DocumentMapping
         d.ExtractedText is { Length: > 1000 } text ? text[..1000] : d.ExtractedText,
         d.Kind == DocumentKind.Pdf && !d.HasTextLayer
             ? "This PDF has no readable text, so it may be a scan. Upload a photo or image of the invoice instead."
-            : null);
+            : null,
+        d.ExtractionAttempts, d.LastError);
 }
 
 public sealed class UploadDocumentHandler(

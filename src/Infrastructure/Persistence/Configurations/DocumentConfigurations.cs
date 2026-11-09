@@ -19,6 +19,7 @@ public class SourceDocumentConfiguration : IEntityTypeConfiguration<SourceDocume
         builder.Property(d => d.Sha256).IsRequired().HasMaxLength(64).IsFixedLength();
         builder.Property(d => d.Status).HasConversion<string>().IsRequired().HasMaxLength(20);
         builder.Property(d => d.RejectionReason).HasMaxLength(500);
+        builder.Property(d => d.LastError).HasMaxLength(500);
         builder.Property(d => d.CreatedAt).IsRequired();
 
         builder.Ignore(d => d.ContentType);
@@ -51,5 +52,25 @@ public class DocumentBlobConfiguration : IEntityTypeConfiguration<DocumentBlob>
         builder.HasOne<SourceDocument>().WithMany().HasForeignKey(b => b.DocumentId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(b => b.DocumentId).IsUnique();
+    }
+}
+
+public class DocumentExtractionConfiguration : IEntityTypeConfiguration<DocumentExtraction>
+{
+    public void Configure(EntityTypeBuilder<DocumentExtraction> builder)
+    {
+        builder.ToTable("DocumentExtractions");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).ValueGeneratedNever();
+
+        builder.Property(e => e.Model).IsRequired().HasMaxLength(80);
+        builder.Property(e => e.ErrorMessage).HasMaxLength(500);
+        builder.Property(e => e.CreatedAt).IsRequired();
+
+        builder.HasOne<Organization>().WithMany().HasForeignKey(e => e.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<SourceDocument>().WithMany().HasForeignKey(e => e.DocumentId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<User>().WithMany().HasForeignKey(e => e.RequestedByUserId).OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(e => new { e.DocumentId, e.AttemptNumber });
     }
 }

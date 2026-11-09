@@ -6,12 +6,16 @@ namespace Domain.Documents;
 public enum DocumentStatus
 {
     Uploaded = 0,
-    Rejected = 1
+    Rejected = 1,
+    ReadyForReview = 2,
+    Failed = 3
 }
 
 // Metadata about an uploaded supplier document. The file's bytes live in DocumentBlob, never here.
 public sealed class SourceDocument : BaseEntity, ITenantOwned
 {
+    public const int MaxExtractionAttempts = 5;
+
     private SourceDocument() { }
 
     public Guid OrganizationId { get; private set; }
@@ -26,6 +30,10 @@ public sealed class SourceDocument : BaseEntity, ITenantOwned
     public DocumentStatus Status { get; private set; }
     public string? RejectionReason { get; private set; }
     public DateTimeOffset? RejectedAt { get; private set; }
+
+    public string? ExtractedData { get; private set; }     // the latest validated extraction, as JSON
+    public int ExtractionAttempts { get; private set; }
+    public string? LastError { get; private set; }
 
     public string ContentType => DocumentRules.ContentTypeOf(Kind);
 
@@ -61,10 +69,43 @@ public sealed class SourceDocument : BaseEntity, ITenantOwned
         };
     }
 
+    public void EnsureCanExtract()
+    {
+        if (Status is not (DocumentStatus.Uploaded or DocumentStatus.ReadyForReview or DocumentStatus.Failed))
+            throw new DomainException("This document can no longer be extracted.");
+
+        if (ExtractionAttempts >= MaxExtractionAttempts)
+            throw new DomainException(
+                $"This document has used all {MaxExtractionAttempts} extraction attempts. " +
+                "Reject it and upload it again, or enter the bill by hand.");
+    }
+
+    public void RecordExtraction(string extractedJson)
+    {
+        EnsureCanExtract();
+
+        ExtractedData = Guard.NotBlank(extractedJson, nameof(ExtractedData), 200_000);
+        ExtractionAttempts++;
+        LastError = null;
+        Status = DocumentStatus.ReadyForReview;
+    }
+
+    public void RecordFailure(string error)
+    {
+        EnsureCanExtract();
+
+        var message = error.Length > 500 ? error[..500] : error;
+        ExtractionAttempts++;
+        LastError = Guard.NotBlank(message, nameof(LastError), 500);
+
+        // An earlier good extraction stays reviewable even when a retry fails.
+        Status = ExtractedData is null ? DocumentStatus.Failed : DocumentStatus.ReadyForReview;
+    }
+
     public void Reject(string reason, DateTimeOffset now)
     {
-        if (Status != DocumentStatus.Uploaded)
-            throw new DomainException("Only documents that are waiting can be rejected.");
+        if (Status is not (DocumentStatus.Uploaded or DocumentStatus.ReadyForReview or DocumentStatus.Failed))
+            throw new DomainException("This document can no longer be rejected.");
 
         RejectionReason = Guard.NotBlank(reason, nameof(RejectionReason), 500);
         RejectedAt = now;

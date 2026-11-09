@@ -87,6 +87,10 @@ public static class DependencyInjection
         services.AddScoped<IDocumentStorage, DatabaseDocumentStorage>();
         services.AddSingleton<IPdfTextExtractor, PdfPigTextExtractor>();
 
+        services.AddScoped<IDocumentExtractionRepository, DocumentExtractionRepository>();
+        services.AddScoped<ExtractionReviewBuilder>();
+        services.AddHttpClient<IDocumentExtractionModel, GemmaDocumentExtractionModel>();
+
         emailSettings.Validate();
         services.AddSingleton(emailSettings);
 

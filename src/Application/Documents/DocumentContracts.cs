@@ -13,7 +13,8 @@ public sealed record DocumentSummaryDto(
 public sealed record DocumentDto(
     Guid Id, string FileName, DocumentKind Kind, string ContentType, long SizeBytes, string Sha256,
     int PageCount, bool HasTextLayer, DocumentStatus Status, string? RejectionReason,
-    Guid UploadedByUserId, DateTimeOffset UploadedAt, string? TextPreview, string? Advice);
+    Guid UploadedByUserId, DateTimeOffset UploadedAt, string? TextPreview, string? Advice,
+    int ExtractionAttempts, string? LastError);
 
 public sealed record DocumentFile(byte[] Content, string FileName, string ContentType);
 

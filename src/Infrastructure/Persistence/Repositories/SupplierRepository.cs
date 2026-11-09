@@ -32,4 +32,13 @@ public class SupplierRepository(AppDbContext context) : ISupplierRepository
     }
 
     public void Add(Supplier supplier) => context.Suppliers.Add(supplier);
+
+    public async Task<IReadOnlyList<SupplierCandidate>> ListForMatchingAsync(
+    CancellationToken cancellationToken = default)
+    => await context.Suppliers.AsNoTracking()
+        .Where(s => !s.IsArchived)
+        .OrderBy(s => s.Name)
+        .Take(1000)
+        .Select(s => new SupplierCandidate(s.Id, s.Name, s.TaxIdentificationNumber))
+        .ToListAsync(cancellationToken);
 }

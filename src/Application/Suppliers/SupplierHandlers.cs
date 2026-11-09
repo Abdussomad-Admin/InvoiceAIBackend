@@ -16,6 +16,8 @@ public sealed record SupplierDto(
     string? PostalCode, string? CountryCode, string? Notes, int DefaultPaymentTermsDays,
     bool IsArchived, DateTimeOffset CreatedAt);
 
+public sealed record SupplierCandidate(Guid Id, string Name, string? TaxIdentificationNumber);
+
 public sealed record ListSuppliersQuery(string? Search, bool IncludeArchived, int Page, int PageSize);
 
 public interface ISupplierRepository
@@ -26,6 +28,8 @@ public interface ISupplierRepository
         string? search, bool includeArchived, int skip, int take, CancellationToken cancellationToken = default);
 
     void Add(Supplier supplier);
+
+    Task<IReadOnlyList<SupplierCandidate>> ListForMatchingAsync(CancellationToken cancellationToken = default);
 }
 
 internal static class SupplierMapping

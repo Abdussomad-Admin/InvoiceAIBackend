@@ -79,6 +79,10 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("upload", httpContext => RateLimitPartition.GetFixedWindowLimiter(
     httpContext.User.FindFirst("sub")?.Value ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
     _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
+
+    options.AddPolicy("extract", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+    httpContext.User.FindFirst("sub")?.Value ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+    _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromHours(1) }));
 });
 
 // Register every class ending in "Handler" from the Application project.
