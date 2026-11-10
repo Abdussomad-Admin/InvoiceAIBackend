@@ -8,7 +8,8 @@ public enum DocumentStatus
     Uploaded = 0,
     Rejected = 1,
     ReadyForReview = 2,
-    Failed = 3
+    Failed = 3,
+    Approved = 4
 }
 
 // Metadata about an uploaded supplier document. The file's bytes live in DocumentBlob, never here.
@@ -34,6 +35,9 @@ public sealed class SourceDocument : BaseEntity, ITenantOwned
     public string? ExtractedData { get; private set; }     // the latest validated extraction, as JSON
     public int ExtractionAttempts { get; private set; }
     public string? LastError { get; private set; }
+
+    public Guid? BillId { get; private set; }
+    public DateTimeOffset? ApprovedAt { get; private set; }
 
     public string ContentType => DocumentRules.ContentTypeOf(Kind);
 
@@ -100,6 +104,22 @@ public sealed class SourceDocument : BaseEntity, ITenantOwned
 
         // An earlier good extraction stays reviewable even when a retry fails.
         Status = ExtractedData is null ? DocumentStatus.Failed : DocumentStatus.ReadyForReview;
+    }
+
+    public void EnsureCanApprove()
+    {
+        if (Status is not (DocumentStatus.Uploaded or DocumentStatus.ReadyForReview or DocumentStatus.Failed))
+            throw new DomainException("This document can no longer be approved.");
+    }
+
+    public void Approve(Guid billId, DateTimeOffset now)
+    {
+        EnsureCanApprove();
+        if (billId == Guid.Empty) throw new DomainException("A bill is required.");
+
+        BillId = billId;
+        ApprovedAt = now;
+        Status = DocumentStatus.Approved;
     }
 
     public void Reject(string reason, DateTimeOffset now)

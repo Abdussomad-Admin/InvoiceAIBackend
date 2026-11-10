@@ -42,5 +42,19 @@ public class DocumentRepository(AppDbContext context) : IDocumentRepository
         return (items, total);
     }
 
+    public async Task<bool> LockAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        // The filtered query first, so another organization's document is never even locked.
+        if (!await context.SourceDocuments.AsNoTracking().AnyAsync(d => d.Id == id, cancellationToken))
+            return false;
+
+        await context.Database.ExecuteSqlAsync(
+            $"""SELECT 1 FROM "SourceDocuments" WHERE "Id" = {id} FOR UPDATE""", cancellationToken);
+        return true;
+    }
+
+    public Task<SourceDocument?> GetByBillIdAsync(Guid billId, CancellationToken cancellationToken = default)
+        => context.SourceDocuments.AsNoTracking().FirstOrDefaultAsync(d => d.BillId == billId, cancellationToken);
+
     public void Add(SourceDocument document) => context.SourceDocuments.Add(document);
 }

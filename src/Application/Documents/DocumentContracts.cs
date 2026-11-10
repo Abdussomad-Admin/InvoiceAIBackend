@@ -14,7 +14,7 @@ public sealed record DocumentDto(
     Guid Id, string FileName, DocumentKind Kind, string ContentType, long SizeBytes, string Sha256,
     int PageCount, bool HasTextLayer, DocumentStatus Status, string? RejectionReason,
     Guid UploadedByUserId, DateTimeOffset UploadedAt, string? TextPreview, string? Advice,
-    int ExtractionAttempts, string? LastError);
+    int ExtractionAttempts, string? LastError, Guid? BillId);
 
 public sealed record DocumentFile(byte[] Content, string FileName, string ContentType);
 
@@ -54,5 +54,8 @@ public interface IDocumentRepository
     Task<(IReadOnlyList<DocumentSummaryDto> Items, int Total)> SearchAsync(
         DocumentStatus? status, int skip, int take, CancellationToken cancellationToken = default);
 
+    // Locks the document row until the current transaction ends. False if it is not visible to this organization.
+    Task<bool> LockAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<Domain.Documents.SourceDocument?> GetByBillIdAsync(Guid billId, CancellationToken cancellationToken = default);
     void Add(Domain.Documents.SourceDocument document);
 }

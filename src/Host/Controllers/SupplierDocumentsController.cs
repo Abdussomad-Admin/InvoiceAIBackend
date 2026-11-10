@@ -19,7 +19,9 @@ public class SupplierDocumentsController(
     RejectDocumentHandler reject,
     ExtractDocumentHandler extract,
     GetExtractionHandler getExtraction,
-    ListExtractionsHandler extractionHistory) : ControllerBase
+    ListExtractionsHandler extractionHistory,
+    ApproveDocumentHandler approve,
+    GetDocumentByBillHandler byBill) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = nameof(Permission.ViewPayables))]
@@ -63,6 +65,17 @@ public class SupplierDocumentsController(
         var dto = await upload.Handle(new UploadDocumentCommand(file.FileName, content), ct);
         return CreatedAtRoute("GetDocument", new { id = dto.Id }, dto);
     }
+
+    // Creates a DRAFT bill from the values the reviewer confirmed. Finalizing is a separate, deliberate step.
+    [HttpPost("{id:guid}/approve")]
+    [Authorize(Policy = nameof(Permission.ManagePayables))]
+    public async Task<ActionResult<ApprovalResultDto>> Approve(Guid id, ApproveDocumentCommand command, CancellationToken ct)
+        => Ok(await approve.Handle(id, command, ct));
+
+    [HttpGet("by-bill/{billId:guid}")]
+    [Authorize(Policy = nameof(Permission.ViewPayables))]
+    public async Task<ActionResult<DocumentDto>> ByBill(Guid billId, CancellationToken ct)
+        => Ok(await byBill.Handle(billId, ct));
 
     [HttpPost("{id:guid}/reject")]
     [Authorize(Policy = nameof(Permission.ManagePayables))]

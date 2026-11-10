@@ -61,6 +61,17 @@ public class ExtractionParserTests
     }
 
     [Fact]
+    public void Parse_NeverShortensIdentifiers_ItDropsThem()
+    {
+        var bill = ExtractionParser.Parse(
+            $$"""{"invoiceNumber":"{{new string('9', 150)}}","supplierTaxId":"{{new string('T', 80)}}","supplierName":"{{new string('N', 300)}}"}""");
+
+        Assert.Null(bill.InvoiceNumber);                  // too long to be real, so blank, not cut short
+        Assert.Null(bill.SupplierTaxId);
+        Assert.Equal(200, bill.SupplierName!.Length);     // display text may be shortened
+    }
+
+    [Fact]
     public void Parse_IsStrictAboutDatesAndCurrency()
     {
         var bill = ExtractionParser.Parse("""{"invoiceDate":"10/01/2026","dueDate":"2026-02-09","currency":"Naira"}""");

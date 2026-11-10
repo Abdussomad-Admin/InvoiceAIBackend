@@ -461,6 +461,12 @@ namespace Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("BillId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -524,6 +530,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BillId")
+                        .IsUnique()
+                        .HasFilter("\"BillId\" IS NOT NULL");
 
                     b.HasIndex("UploadedByUserId");
 
@@ -1265,6 +1275,11 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Documents.SourceDocument", b =>
                 {
+                    b.HasOne("Domain.Bills.SupplierBill", null)
+                        .WithMany()
+                        .HasForeignKey("BillId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Domain.Organizations.Organization", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId")

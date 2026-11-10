@@ -273,10 +273,18 @@ public class AppDbContext(
                     $"{d.FileName} ({d.SizeBytes} bytes)");
 
             case SourceDocument d:
-                return Changed(entry.Property(nameof(SourceDocument.Status)))
-                    ? new(d.OrganizationId, $"Document.{d.Status}", "SourceDocument", d.Id,
-                        d.RejectionReason is null ? d.FileName : $"{d.FileName}; reason: {d.RejectionReason}")
-                    : null;
+                {
+                    if (!Changed(entry.Property(nameof(SourceDocument.Status)))) return null;
+
+                    var details = d.Status switch
+                    {
+                        DocumentStatus.Rejected => $"{d.FileName}; reason: {d.RejectionReason}",
+                        DocumentStatus.Approved => $"{d.FileName}; draft bill {d.BillId}",
+                        _ => d.FileName
+                    };
+
+                    return new(d.OrganizationId, $"Document.{d.Status}", "SourceDocument", d.Id, details);
+                }
 
             default:
                 return null;

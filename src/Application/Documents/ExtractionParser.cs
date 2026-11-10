@@ -25,10 +25,14 @@ public static class ExtractionParser
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) throw new DomainException(Unreadable);
 
-            var currency = Text(root, "currency", 3)?.ToUpperInvariant();
+            // Identifiers and codes are never shortened. A cut-off value looks plausible but is wrong,
+            // so one that does not fit becomes null and the reviewer fills it in.
+            var currency = Text(root, "currency", 20, truncate: false)?.ToUpperInvariant();
 
             return new ExtractedBill(
-                Text(root, "supplierName", 200), Text(root, "supplierTaxId", 50), Text(root, "invoiceNumber", 100),
+                Text(root, "supplierName", 200),
+                Text(root, "supplierTaxId", 50, truncate: false),
+                Text(root, "invoiceNumber", 100, truncate: false),
                 Date(root, "invoiceDate"), Date(root, "dueDate"),
                 currency is not null && CurrencyCode.IsMatch(currency) ? currency : null,
                 Number(root, "subtotal"), Number(root, "taxTotal"), Number(root, "total"), Lines(root));
@@ -49,7 +53,7 @@ public static class ExtractionParser
         return start >= 0 && end > start ? text[start..(end + 1)] : null;
     }
 
-    private static string? Text(JsonElement root, string name, int max)
+    private static string? Text(JsonElement root, string name, int max, bool truncate = true)
     {
         if (!root.TryGetProperty(name, out var element)) return null;
 
@@ -64,12 +68,16 @@ public static class ExtractionParser
 
         value = new string(value.Where(c => !char.IsControl(c)).ToArray()).Trim();
         if (value.Length == 0) return null;
-        return value.Length > max ? value[..max] : value;
+
+        if (value.Length > max)
+            return truncate ? value[..max] : null;
+
+        return value;
     }
 
     private static DateOnly? Date(JsonElement root, string name)
     {
-        var text = Text(root, name, 20);
+        var text = Text(root, name, 20, truncate: false);
         return text is not null &&
                DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
             ? date

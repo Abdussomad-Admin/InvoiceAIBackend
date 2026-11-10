@@ -1,4 +1,5 @@
-﻿using Domain.Documents;
+﻿using Domain.Bills;
+using Domain.Documents;
 using Domain.Organizations;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +24,11 @@ public class SourceDocumentConfiguration : IEntityTypeConfiguration<SourceDocume
         builder.Property(d => d.CreatedAt).IsRequired();
 
         builder.Ignore(d => d.ContentType);
+
+        builder.HasOne<SupplierBill>().WithMany().HasForeignKey(d => d.BillId).OnDelete(DeleteBehavior.Restrict);
+
+        // One document leads to at most one bill.
+        builder.HasIndex(d => d.BillId).IsUnique().HasFilter("\"BillId\" IS NOT NULL");
 
         builder.HasOne<Organization>().WithMany().HasForeignKey(d => d.OrganizationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<User>().WithMany().HasForeignKey(d => d.UploadedByUserId).OnDelete(DeleteBehavior.Restrict);

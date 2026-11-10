@@ -16,7 +16,7 @@ internal static class DocumentMapping
         d.Kind == DocumentKind.Pdf && !d.HasTextLayer
             ? "This PDF has no readable text, so it may be a scan. Upload a photo or image of the invoice instead."
             : null,
-        d.ExtractionAttempts, d.LastError);
+        d.ExtractionAttempts, d.LastError, d.BillId);
 }
 
 public sealed class UploadDocumentHandler(
