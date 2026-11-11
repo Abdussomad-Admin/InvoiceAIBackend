@@ -18,7 +18,7 @@ public sealed class BrevoEmailSender(
                 ["sender"] = new { name = settings.FromName, email = settings.FromAddress },
                 ["to"] = new[] { new { email = email.To } },
                 ["subject"] = email.Subject,
-                ["htmlContent"] = EmailHtml.FromPlainText(email.Body)
+                ["htmlContent"] = email.HtmlBody ?? EmailHtml.FromPlainText(email.Body)
             };
 
             if (!string.IsNullOrWhiteSpace(email.ReplyTo))

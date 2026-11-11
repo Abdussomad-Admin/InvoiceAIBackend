@@ -17,6 +17,8 @@ public sealed class SmtpEmailSender(EmailSettings settings, ILogger<SmtpEmailSen
         message.Subject = email.Subject;
 
         var builder = new BodyBuilder { TextBody = email.Body };
+        if (!string.IsNullOrWhiteSpace(email.HtmlBody))
+            builder.HtmlBody = email.HtmlBody;
         foreach (var attachment in email.Attachments ?? Array.Empty<EmailAttachment>())
             builder.Attachments.Add(attachment.FileName, attachment.Content, ContentType.Parse(attachment.ContentType));
 

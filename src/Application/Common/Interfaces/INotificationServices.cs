@@ -5,7 +5,8 @@ public sealed record EmailAttachment(string FileName, string ContentType, byte[]
 public sealed record OutgoingEmail(
     string To, string Subject, string Body,
     IReadOnlyList<EmailAttachment>? Attachments = null,
-    string? ReplyTo = null);
+    string? ReplyTo = null,
+    string? HtmlBody = null);
 
 public interface IEmailSender
 {
