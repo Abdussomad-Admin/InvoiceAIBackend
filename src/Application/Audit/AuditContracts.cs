@@ -1,5 +1,7 @@
 ﻿using Application.Common;
 
+using Domain.Audit;
+
 namespace Application.Audit;
 
 public sealed record ListAuditQuery(
@@ -14,6 +16,8 @@ public sealed record AuditEntryDto(
 
 public interface IAuditRepository
 {
+    void Add(AuditEntry entry);
+
     Task<(IReadOnlyList<AuditEntryDto> Items, int Total)> SearchAsync(
         AuditSearch filter, int skip, int take, CancellationToken cancellationToken = default);
 }

@@ -31,7 +31,8 @@ public sealed class RefreshHandler(
         if (!stored.IsActive(now)) throw new AuthenticationFailedException(invalid);
 
         var user = await users.GetByIdAsync(stored.UserId, cancellationToken);
-        if (user is null || !user.IsActive) throw new AuthenticationFailedException(invalid);
+        if (user is null || !user.IsActive || !user.IsEmailVerified)
+            throw new AuthenticationFailedException(invalid);
 
         var active = await memberships.GetActiveForUserAsync(user.Id, cancellationToken);
 

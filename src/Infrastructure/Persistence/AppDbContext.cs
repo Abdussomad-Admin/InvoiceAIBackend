@@ -1,9 +1,12 @@
 ﻿using Application.Common.Interfaces;
 using Domain.Audit;
+using Domain.Billing;
+using Domain.Banking;
 using Domain.Bills;
 using Domain.Common;
 using Domain.Customers;
 using Domain.Documents;
+using Domain.Email;
 using Domain.Invoices;
 using Domain.Organizations;
 using Domain.Payments;
@@ -37,6 +40,11 @@ public class AppDbContext(
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+    public DbSet<EmailOutboxMessage> EmailOutbox => Set<EmailOutboxMessage>();
+    public DbSet<BankStatementBatch> BankStatementBatches => Set<BankStatementBatch>();
+    public DbSet<BankStatementLine> BankStatementLines => Set<BankStatementLine>();
+    public DbSet<OrganizationSubscription> OrganizationSubscriptions => Set<OrganizationSubscription>();
+    public DbSet<BillingCheckout> BillingCheckouts => Set<BillingCheckout>();
 
     private Guid? CurrentOrganizationId => currentOrganization.OrganizationId;
     private bool _allowCrossTenantWrites;
@@ -150,6 +158,18 @@ public class AppDbContext(
 
         switch (entry.Entity)
         {
+            case BankStatementBatch b when added:
+                return new(b.OrganizationId, "BankStatement.Imported", "BankStatementBatch", b.Id,
+                    $"{b.FileName}; {b.ImportedLineCount} lines");
+
+            case BankStatementLine l when !added:
+                {
+                    var status = entry.Property(nameof(BankStatementLine.Status));
+                    if (!Changed(status)) return null;
+                    return new(l.OrganizationId, $"BankStatementLine.{l.Status}", "BankStatementLine", l.Id,
+                        $"Amount {Fmt(l.Amount)} {l.CurrencyCode}; row {l.RowNumber}; payment {l.MatchedPaymentId}");
+                }
+
             case Invoice i when added:
                 return new(i.OrganizationId, "Invoice.Created", "Invoice", i.Id, $"Total {Fmt(i.Total)} {i.CurrencyCode}");
 

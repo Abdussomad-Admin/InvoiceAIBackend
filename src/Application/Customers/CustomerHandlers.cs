@@ -1,6 +1,7 @@
 ﻿using Application.Common;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Domain.Common;
 using Domain.Customers;
 
 namespace Application.Customers;
@@ -16,6 +17,9 @@ public sealed record CustomerDto(
     string? PostalCode, string? CountryCode, string? Notes, bool IsArchived, DateTimeOffset CreatedAt);
 
 public sealed record ListCustomersQuery(string? Search, bool IncludeArchived, int Page, int PageSize);
+public sealed record CustomerImportRow(int RowNumber, CustomerInput Input);
+public sealed record CustomerImportError(int RowNumber, string Message);
+public sealed record CustomerImportResult(int RowsRead, int Imported, IReadOnlyList<CustomerImportError> Errors);
 
 internal static class CustomerMapping
 {
@@ -86,4 +90,64 @@ public sealed class ListCustomersHandler(ICustomerRepository customers)
 
         return new PagedResult<CustomerDto>(items.Select(c => c.ToDto()).ToList(), total, page, pageSize);
     }
+}
+
+public sealed class ImportCustomersHandler(
+    ICustomerRepository customers, IUnitOfWork unitOfWork, ICurrentOrganization currentOrganization)
+{
+    public async Task<CustomerImportResult> Handle(
+        IReadOnlyList<CustomerImportRow> rows, CancellationToken cancellationToken)
+    {
+        var errors = new List<CustomerImportError>();
+        var candidates = new List<(CustomerImportRow Row, Customer Customer)>();
+        var seenEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var row in rows)
+        {
+            if (string.IsNullOrWhiteSpace(row.Input.Name))
+            {
+                errors.Add(new(row.RowNumber, "Name is required."));
+                continue;
+            }
+
+            try
+            {
+                var customer = Customer.Create(currentOrganization.RequireId(), row.Input.Name);
+                customer.Apply(row.Input);
+                candidates.Add((row, customer));
+                if (!string.IsNullOrWhiteSpace(row.Input.Email))
+                    seenEmails.Add(row.Input.Email.Trim());
+            }
+            catch (DomainException ex)
+            {
+                errors.Add(new(row.RowNumber, ex.Message));
+            }
+        }
+
+        var existingEmails = await customers.ExistingEmailsAsync(seenEmails, cancellationToken);
+        var accepted = new List<Customer>();
+        foreach (var (row, customer) in candidates)
+        {
+            var email = row.Input.Email?.Trim();
+            if (email is not null && (existingEmails.Contains(email) || !seenEmails.Remove(email)))
+            {
+                errors.Add(new(row.RowNumber, "A customer with this email is already present in the account or this file."));
+                continue;
+            }
+            accepted.Add(customer);
+            if (email is not null) existingEmails.Add(email);
+        }
+
+        customers.AddRange(accepted);
+        if (accepted.Count > 0)
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return new CustomerImportResult(rows.Count, accepted.Count, errors.OrderBy(e => e.RowNumber).ToList());
+    }
+}
+
+public sealed class ExportCustomersHandler(ICustomerRepository customers)
+{
+    public async Task<IReadOnlyList<CustomerDto>> Handle(CancellationToken cancellationToken)
+        => (await customers.ExportAsync(cancellationToken)).Select(c => c.ToDto()).ToList();
 }

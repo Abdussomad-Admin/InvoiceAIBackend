@@ -13,7 +13,9 @@ public sealed class LoginHandler(
     IUnitOfWork unitOfWork,
     IPasswordHasher passwordHasher,
     SessionIssuer sessions,
-    TimeProvider clock)
+    TimeProvider clock,
+    AccountMailer mailer,
+    IEmailSender emailSender)
 {
     private const string InvalidCredentials = "Invalid email or password.";
 
@@ -27,6 +29,15 @@ public sealed class LoginHandler(
 
         if (user is null || !user.IsActive || !passwordHasher.Verify(user.PasswordHash, command.Password ?? ""))
             throw new AuthenticationFailedException(InvalidCredentials);
+
+        if (!user.IsEmailVerified)
+        {
+            var verification = await mailer.BuildVerificationAsync(user, cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await emailSender.SendAsync(verification, cancellationToken);
+            throw new AuthenticationFailedException(
+                "Your email is not verified yet. We sent a fresh verification link. Open it to continue to your dashboard.");
+        }
 
         var active = await memberships.GetActiveForUserAsync(user.Id, cancellationToken);
         Guid? organizationId = active

@@ -1,4 +1,4 @@
-﻿using Application.Auth;
+using Application.Auth;
 using Application.Common.Exceptions;
 using Domain.Organizations;
 using Infrastructure.Auth;
@@ -23,14 +23,21 @@ public class SessionTests
     private static async Task<(string Email, RegisterResult Registered)> RegisterAsync()
     {
         var email = $"{Guid.NewGuid()}@example.com";
+        var sender = new CapturingEmailSender();
         await using var ctx = TestDatabase.CreateContext(Clock);
         var handler = new RegisterHandler(
             new UserRepository(ctx), new OrganizationRepository(ctx), new MembershipRepository(ctx),
             ctx, new IdentityPasswordHasher(), AccountTestHelpers.CreateMailer(ctx, Clock),
-            new CapturingEmailSender());
+            sender);
         var registered = await handler.Handle(
             new RegisterCommand(email, "Passw0rd!23", "Ada Obi", $"Acme {Guid.NewGuid()}"),
             CancellationToken.None);
+
+        var verify = new VerifyEmailHandler(
+            new UserTokenRepository(ctx), new UserRepository(ctx), new SecureTokenService(),
+            new MembershipRepository(ctx), AccountTestHelpers.CreateSessions(ctx, Clock, Jwt), ctx, Clock);
+        await verify.Handle(new VerifyEmailCommand(sender.LastTokenFor(email)), CancellationToken.None);
+
         return (email, registered);
     }
 
@@ -39,7 +46,8 @@ public class SessionTests
         await using var ctx = TestDatabase.CreateContext(Clock);
         var handler = new LoginHandler(
             new UserRepository(ctx), new MembershipRepository(ctx), ctx,
-            new IdentityPasswordHasher(), AccountTestHelpers.CreateSessions(ctx, Clock, Jwt), Clock);
+            new IdentityPasswordHasher(), AccountTestHelpers.CreateSessions(ctx, Clock, Jwt), Clock,
+            AccountTestHelpers.CreateMailer(ctx, Clock), new CapturingEmailSender());
         return await handler.Handle(new LoginCommand(email, "Passw0rd!23"), CancellationToken.None);
     }
 

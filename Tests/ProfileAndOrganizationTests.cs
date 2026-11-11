@@ -1,4 +1,4 @@
-﻿using Application.Auth;
+using Application.Auth;
 using Application.Common.Exceptions;
 using Application.Organizations;
 using Application.Users;
@@ -44,7 +44,8 @@ public class ProfileTests
         await using var ctx = TestDatabase.CreateContext(Clock);
         var handler = new LoginHandler(
             new UserRepository(ctx), new MembershipRepository(ctx), ctx,
-            new IdentityPasswordHasher(), AccountTestHelpers.CreateSessions(ctx, Clock, Jwt), Clock);
+            new IdentityPasswordHasher(), AccountTestHelpers.CreateSessions(ctx, Clock, Jwt), Clock,
+            AccountTestHelpers.CreateMailer(ctx, Clock), new CapturingEmailSender());
         return await handler.Handle(new LoginCommand(email, password), CancellationToken.None);
     }
 

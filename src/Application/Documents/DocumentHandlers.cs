@@ -1,4 +1,5 @@
 ﻿using System.Security.Cryptography;
+using Application.Billing;
 using Application.Common;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
@@ -21,7 +22,8 @@ internal static class DocumentMapping
 
 public sealed class UploadDocumentHandler(
     IDocumentRepository documents, IDocumentStorage storage, IPdfTextExtractor pdf, IUnitOfWork unitOfWork,
-    ICurrentOrganization currentOrganization, ICurrentUser currentUser, DocumentSettings settings)
+    ICurrentOrganization currentOrganization, ICurrentUser currentUser, DocumentSettings settings,
+    IPlanLimitChecker? planLimits = null)
 {
     public async Task<DocumentDto> Handle(UploadDocumentCommand command, CancellationToken cancellationToken)
     {
@@ -43,8 +45,9 @@ public sealed class UploadDocumentHandler(
         if (existing is not null)
             throw new ConflictException($"This file was already uploaded as '{existing.FileName}'.");
 
-        var stored = await documents.GetStoredBytesAsync(cancellationToken);
-        if (stored + content.Length > settings.MaxStoredMegabytes * 1024L * 1024L)
+        if (planLimits is not null)
+            await planLimits.EnsureStorageCapacityAsync(content.Length, settings.MaxStoredMegabytes * 1024L * 1024L, cancellationToken);
+        else if (await documents.GetStoredBytesAsync(cancellationToken) + content.Length > settings.MaxStoredMegabytes * 1024L * 1024L)
             throw new DomainException("Your document storage is full. Reject documents you no longer need.");
 
         var pageCount = 1;

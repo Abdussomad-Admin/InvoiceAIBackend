@@ -2,6 +2,7 @@
 using Application.Invoices;
 using Domain.Invoices;
 using Domain.Organizations;
+using Host.ImportExport;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -18,7 +19,8 @@ public class InvoicesController(
     SendInvoiceHandler send,
     GetInvoiceHandler get,
     GetInvoicePdfHandler pdf,
-    ListInvoicesHandler list) : ControllerBase
+    ListInvoicesHandler list,
+    ExportInvoicesHandler export) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = nameof(Permission.ViewData))]
@@ -27,6 +29,35 @@ public class InvoicesController(
         [FromQuery] bool? overdue, [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
         => Ok(await list.Handle(new ListInvoicesQuery(search, status, customerId, overdue, page, pageSize), ct));
+
+    [HttpGet("export")]
+    [Authorize(Policy = nameof(Permission.ViewData))]
+    public async Task<IActionResult> Export([FromQuery] string format = "xlsx", CancellationToken ct = default)
+    {
+        var invoices = await export.Handle(ct);
+        if (invoices.Count > 50_000)
+        {
+            Response.Headers["X-Export-Truncated"] = "true";
+            invoices = invoices.Take(50_000).ToList();
+        }
+        var headers = new[] { "InvoiceNumber", "CustomerName", "CurrencyCode", "Status", "IssueDate",
+            "DueDate", "Total", "AmountPaid", "Balance", "CreatedAt" };
+        var rows = invoices.Select(i => new[] { i.Number ?? "", i.CustomerName, i.CurrencyCode, i.Status.ToString(),
+            i.IssueDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "",
+            i.DueDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "",
+            i.Total.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+            i.AmountPaid.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+            i.Balance.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+            i.CreatedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture) }).ToList();
+        var date = DateTime.UtcNow.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture);
+        return format.Trim().ToLowerInvariant() switch
+        {
+            "csv" => File(SpreadsheetFiles.WriteCsv(headers, rows), "text/csv; charset=utf-8", $"invoices-{date}.csv"),
+            "xlsx" => File(SpreadsheetFiles.WriteExcel("Invoices", headers, rows),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"invoices-{date}.xlsx"),
+            _ => BadRequest("Format must be csv or xlsx.")
+        };
+    }
 
     [HttpGet("{id:guid}", Name = "GetInvoice")]
     [Authorize(Policy = nameof(Permission.ViewData))]

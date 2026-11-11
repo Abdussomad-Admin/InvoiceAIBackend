@@ -68,6 +68,16 @@ public class InvoiceRepository(AppDbContext context) : IInvoiceRepository
 
     public void Add(Invoice invoice) => context.Invoices.Add(invoice);
 
+    public async Task<IReadOnlyList<InvoiceExportRow>> ExportAsync(CancellationToken cancellationToken = default)
+        => await (from invoice in context.Invoices.AsNoTracking()
+                  join customer in context.Customers.AsNoTracking() on invoice.CustomerId equals customer.Id
+                  orderby invoice.CreatedAt descending
+                  select new InvoiceExportRow(invoice.Number, customer.Name, invoice.CurrencyCode,
+                      invoice.Status, invoice.IssueDate, invoice.DueDate, invoice.Total,
+                      invoice.AmountPaid, invoice.Total - invoice.AmountPaid, invoice.CreatedAt))
+            .Take(50_001)
+            .ToListAsync(cancellationToken);
+
     public async Task<bool> LockAsync(Guid id, CancellationToken cancellationToken = default)
     {
         // The filtered query first, so another organization's invoice is never even locked.

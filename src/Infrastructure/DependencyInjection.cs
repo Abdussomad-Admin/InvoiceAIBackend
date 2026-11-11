@@ -2,6 +2,7 @@
 using Application.Audit;
 using Application.Auth;
 using Application.Bills;
+using Application.Banking;
 using Application.Common.Interfaces;
 using Application.Customers;
 using Application.Documents;
@@ -52,6 +53,7 @@ public static class DependencyInjection
         services.AddScoped<SessionIssuer>();
 
         services.AddScoped<ICustomerRepository, CustomerRepository>();
+        services.AddScoped<ICustomerStatementRepository, CustomerStatementRepository>();
 
         services.AddScoped<IInvitationRepository, InvitationRepository>();
         services.AddScoped<ITenantWriteBypass>(sp => sp.GetRequiredService<AppDbContext>());
@@ -61,12 +63,14 @@ public static class DependencyInjection
         services.AddScoped<ITransactionRunner>(sp => sp.GetRequiredService<AppDbContext>());
 
         services.AddScoped<IPaymentRepository, PaymentRepository>();
+        services.AddScoped<IBankStatementRepository, BankStatementRepository>();
         services.AddScoped<IReceivablesRepository, ReceivablesRepository>();
         services.AddScoped<IAuditRepository, AuditRepository>();
 
         services.AddScoped<IDashboardRepository, DashboardRepository>();
 
         services.AddSingleton<IInvoicePdfRenderer, QuestPdfInvoiceRenderer>();
+        services.AddSingleton<ICustomerStatementPdfRenderer, QuestPdfCustomerStatementRenderer>();
 
         services.AddScoped<ISupplierRepository, SupplierRepository>();
         services.AddScoped<IBillRepository, BillRepository>();

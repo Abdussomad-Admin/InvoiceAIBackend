@@ -1,5 +1,6 @@
 ﻿using Application.Auth;
 using Application.Common;
+using Application.Billing;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Users;
@@ -20,7 +21,8 @@ public sealed class InviteMemberHandler(
     ICurrentOrganization currentOrganization,
     ICurrentUser currentUser,
     AppLinkSettings links,
-    TimeProvider clock)
+    TimeProvider clock,
+    IPlanLimitChecker? planLimits = null)
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromDays(7);
 
@@ -44,6 +46,8 @@ public sealed class InviteMemberHandler(
             if (existing is { IsActive: true })
                 throw new ConflictException("This person is already a member.");
         }
+
+        if (planLimits is not null) await planLimits.EnsureMemberCapacityAsync(email, cancellationToken);
 
         var now = clock.GetUtcNow();
 

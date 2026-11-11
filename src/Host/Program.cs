@@ -1,9 +1,11 @@
 using Application.Assistant;
+using Application.Billing;
 using Application.Common;
 using Application.Common.Interfaces;
 using Application.Documents;
 using Domain.Organizations;
 using Host;
+using Host.Background;
 using Host.Authorization;
 using Infrastructure;
 using Infrastructure.Auth;
@@ -35,6 +37,17 @@ var emailSettings = builder.Configuration.GetSection("Email").Get<EmailSettings>
 
 var assistantSettings = builder.Configuration.GetSection("Assistant").Get<AssistantSettings>() ?? new AssistantSettings();
 
+var billingSettings = builder.Configuration.GetSection("Billing").Get<BillingSettings>() ?? new BillingSettings();
+var paystackSettings = builder.Configuration.GetSection("Paystack").Get<PaystackSettings>() ?? new PaystackSettings();
+builder.Services.AddSingleton(billingSettings);
+builder.Services.AddSingleton(paystackSettings);
+builder.Services.AddScoped<IPlanLimitChecker, BillingPlanLimitChecker>();
+builder.Services.AddHttpClient("Paystack", client =>
+{
+    client.BaseAddress = new Uri("https://api.paystack.co/");
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
+
 
 assistantSettings.Validate();
 builder.Services.AddSingleton(assistantSettings);
@@ -42,6 +55,12 @@ builder.Services.AddSingleton(assistantSettings);
 var documentSettings = builder.Configuration.GetSection("Documents").Get<DocumentSettings>() ?? new DocumentSettings();
 documentSettings.Validate();
 builder.Services.AddSingleton(documentSettings);
+
+var reminderSettings = builder.Configuration.GetSection("Reminders").Get<ReminderSettings>() ?? new ReminderSettings();
+reminderSettings.PollIntervalSeconds = Math.Clamp(reminderSettings.PollIntervalSeconds, 10, 3600);
+reminderSettings.MaxAttempts = Math.Clamp(reminderSettings.MaxAttempts, 1, 20);
+reminderSettings.LeaseMinutes = Math.Clamp(reminderSettings.LeaseMinutes, 1, 60);
+builder.Services.AddSingleton(reminderSettings);
 
 
 builder.Services.AddInfrastructure(connectionString, jwt, emailSettings);
@@ -95,6 +114,8 @@ foreach (var type in typeof(Application.Auth.RegisterHandler).Assembly.GetTypes(
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentOrganization, HttpContextCurrentOrganization>();
 builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
+builder.Services.AddScoped<EmailOutboxProcessor>();
+builder.Services.AddHostedService<EmailOutboxWorker>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

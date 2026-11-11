@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Text.Json;
+using Application.Billing;
 using Application.Assistant;
 using Application.Bills;
 using Application.Common.Exceptions;
@@ -65,7 +66,7 @@ public sealed class ExtractDocumentHandler(
     IDocumentRepository documents, IDocumentStorage storage, IDocumentExtractionModel model,
     IDocumentExtractionRepository history, ExtractionReviewBuilder review, IOrganizationRepository organizations,
     IUnitOfWork unitOfWork, ICurrentOrganization currentOrganization, ICurrentUser currentUser,
-    AssistantSettings settings, TimeProvider clock)
+    AssistantSettings settings, TimeProvider clock, IPlanLimitChecker? planLimits = null)
 {
     private const int MaxPromptChars = 30_000;
 
@@ -83,6 +84,7 @@ public sealed class ExtractDocumentHandler(
             ?? throw new NotFoundException("Document not found.");
 
         document.EnsureCanExtract();
+        if (planLimits is not null) await planLimits.EnsureAiExtractionCapacityAsync(cancellationToken);
 
         if (document.Kind == DocumentKind.Pdf && !document.HasTextLayer)
             throw new DomainException("This PDF has no readable text, so it may be a scan. Upload a photo or image of the invoice instead.");

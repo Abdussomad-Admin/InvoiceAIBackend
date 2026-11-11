@@ -34,12 +34,19 @@ public sealed record InvoiceSummaryDto(
     InvoiceStatus Status, DateOnly? IssueDate, DateOnly? DueDate,
     decimal Total, decimal AmountPaid, decimal Balance, bool IsOverdue);
 
+public sealed record InvoiceExportRow(
+    string? Number, string CustomerName, string CurrencyCode, InvoiceStatus Status,
+    DateOnly? IssueDate, DateOnly? DueDate, decimal Total, decimal AmountPaid,
+    decimal Balance, DateTimeOffset CreatedAt);
+
 public interface IInvoiceRepository
 {
     Task<Invoice?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     Task<(IReadOnlyList<InvoiceSummaryDto> Items, int Total)> SearchAsync(
         InvoiceSearch filter, DateOnly today, int skip, int take, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<InvoiceExportRow>> ExportAsync(CancellationToken cancellationToken = default);
 
     // Locks the invoice row until the current transaction ends. False if it is not visible to this organization.
     Task<bool> LockAsync(Guid id, CancellationToken cancellationToken = default);

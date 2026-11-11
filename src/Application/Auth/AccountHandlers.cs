@@ -1,4 +1,5 @@
-﻿using Application.Common.Interfaces;
+using Application.Common.Interfaces;
+using Application.Organizations;
 using Application.Users;
 using Domain.Common;
 using Domain.Users;
@@ -7,9 +8,10 @@ namespace Application.Auth;
 
 public sealed class VerifyEmailHandler(
     IUserTokenRepository tokens, IUserRepository users, ISecureTokenService secure,
+    IMembershipRepository memberships, SessionIssuer sessions,
     IUnitOfWork unitOfWork, TimeProvider clock)
 {
-    public async Task Handle(VerifyEmailCommand command, CancellationToken cancellationToken)
+    public async Task<LoginResult> Handle(VerifyEmailCommand command, CancellationToken cancellationToken)
     {
         const string invalid = "This verification link is invalid or has expired.";
         var now = clock.GetUtcNow();
@@ -20,10 +22,17 @@ public sealed class VerifyEmailHandler(
 
         var user = await users.GetByIdAsync(token.UserId, cancellationToken)
             ?? throw new DomainException(invalid);
+        if (!user.IsActive) throw new DomainException(invalid);
 
         user.VerifyEmail(now);
         token.MarkUsed(now);
+        var active = await memberships.GetActiveForUserAsync(user.Id, cancellationToken);
+        var organizationId = active.OrderBy(m => m.CreatedAt)
+            .Select(m => (Guid?)m.OrganizationId)
+            .FirstOrDefault();
+        var result = sessions.Issue(user, organizationId);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        return result;
     }
 }
 

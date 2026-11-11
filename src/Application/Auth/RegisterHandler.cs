@@ -21,8 +21,27 @@ public sealed class RegisterHandler(
         PasswordPolicy.Validate(command.Password);
 
         var email = User.NormalizeEmail(command.Email);
-        if (await users.EmailExistsAsync(email, cancellationToken))
+        var existingUser = await users.GetByEmailAsync(email, cancellationToken);
+        if (existingUser is not null)
+        {
+            if (!existingUser.IsEmailVerified && existingUser.IsActive)
+            {
+                var existingMemberships = await memberships.GetActiveForUserAsync(existingUser.Id, cancellationToken);
+                var existingOrganizationId = existingMemberships
+                    .OrderBy(m => m.CreatedAt)
+                    .Select(m => (Guid?)m.OrganizationId)
+                    .FirstOrDefault();
+                if (existingOrganizationId is null)
+                    throw new ConflictException("This account needs support before it can be activated.");
+
+                var resend = await mailer.BuildVerificationAsync(existingUser, cancellationToken);
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                await emailSender.SendAsync(resend, cancellationToken);
+                return new RegisterResult(existingUser.Id, existingOrganizationId.Value);
+            }
+
             throw new ConflictException("An account with this email already exists.");
+        }
 
         var user = User.Register(email, passwordHasher.Hash(command.Password), command.FullName);
         var organization = Organization.Create(

@@ -5,6 +5,8 @@ namespace Infrastructure.Persistence.Repositories;
 
 public class AuditRepository(AppDbContext context) : IAuditRepository
 {
+    public void Add(Domain.Audit.AuditEntry entry) => context.AuditEntries.Add(entry);
+
     public async Task<(IReadOnlyList<AuditEntryDto> Items, int Total)> SearchAsync(
         AuditSearch filter, int skip, int take, CancellationToken cancellationToken = default)
     {

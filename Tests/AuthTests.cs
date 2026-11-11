@@ -1,4 +1,4 @@
-﻿using Application.Auth;
+using Application.Auth;
 using Application.Common.Exceptions;
 using Domain.Common;
 using Infrastructure.Auth;
@@ -36,7 +36,8 @@ public class AuthTests
         await using var ctx = TestDatabase.CreateContext(Clock);
         var handler = new LoginHandler(
             new UserRepository(ctx), new MembershipRepository(ctx), ctx,
-            new IdentityPasswordHasher(), AccountTestHelpers.CreateSessions(ctx, Clock, Jwt), Clock);
+            new IdentityPasswordHasher(), AccountTestHelpers.CreateSessions(ctx, Clock, Jwt), Clock,
+            AccountTestHelpers.CreateMailer(ctx, Clock), new CapturingEmailSender());
         return await handler.Handle(command, CancellationToken.None);
     }
 
@@ -44,7 +45,8 @@ public class AuthTests
     {
         await using var ctx = TestDatabase.CreateContext(clock);
         var handler = new VerifyEmailHandler(
-            new UserTokenRepository(ctx), new UserRepository(ctx), new SecureTokenService(), ctx, clock);
+            new UserTokenRepository(ctx), new UserRepository(ctx), new SecureTokenService(),
+            new MembershipRepository(ctx), AccountTestHelpers.CreateSessions(ctx, clock, Jwt), ctx, clock);
         await handler.Handle(new VerifyEmailCommand(token), CancellationToken.None);
     }
 
@@ -72,7 +74,13 @@ public class AuthTests
     public async Task RegisterThenLogin_ReturnsTokenForTheNewOrganization()
     {
         var email = $"{Guid.NewGuid()}@example.com";
-        var registered = await RegisterAsync(NewRegistration(email));
+        var sender = new CapturingEmailSender();
+        var registered = await RegisterAsync(NewRegistration(email), sender);
+
+        await Assert.ThrowsAsync<AuthenticationFailedException>(
+            () => LoginAsync(new LoginCommand(email, "Passw0rd!23")));
+
+        await VerifyAsync(sender.LastTokenFor(email), Clock);
 
         var result = await LoginAsync(new LoginCommand(email, "Passw0rd!23"));
 
@@ -151,7 +159,9 @@ public class AuthTests
     public async Task ResetPassword_ChangesThePassword_AndTokenWorksOnlyOnce()
     {
         var email = $"{Guid.NewGuid()}@example.com";
-        await RegisterAsync(NewRegistration(email));
+        var registrationSender = new CapturingEmailSender();
+        await RegisterAsync(NewRegistration(email), registrationSender);
+        await VerifyAsync(registrationSender.LastTokenFor(email), Clock);
 
         var sender = new CapturingEmailSender();
         await ForgotAsync(email, sender);

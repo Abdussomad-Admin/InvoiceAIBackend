@@ -1,4 +1,5 @@
 ﻿using Application.Common;
+using Application.Billing;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Customers;
@@ -57,11 +58,13 @@ internal static class InvoiceMapping
 
 public sealed class CreateInvoiceHandler(
     IInvoiceRepository invoices, ICustomerRepository customers, IOrganizationRepository organizations,
-    IUnitOfWork unitOfWork, ICurrentOrganization currentOrganization, TimeProvider clock)
+    IUnitOfWork unitOfWork, ICurrentOrganization currentOrganization, TimeProvider clock,
+    IPlanLimitChecker? planLimits = null)
 {
     public async Task<InvoiceDto> Handle(InvoiceInput input, CancellationToken cancellationToken)
     {
         var organization = await InvoiceLookups.OrganizationAsync(organizations, currentOrganization, cancellationToken);
+        if (planLimits is not null) await planLimits.EnsureInvoiceCapacityAsync(cancellationToken);
         var customer = await InvoiceLookups.ActiveCustomerAsync(customers, input.CustomerId, cancellationToken);
 
         var invoice = Invoice.CreateDraft(
@@ -174,4 +177,10 @@ public sealed class ListInvoicesHandler(
 
         return new PagedResult<InvoiceSummaryDto>(items, total, page, pageSize);
     }
+}
+
+public sealed class ExportInvoicesHandler(IInvoiceRepository invoices)
+{
+    public Task<IReadOnlyList<InvoiceExportRow>> Handle(CancellationToken cancellationToken)
+        => invoices.ExportAsync(cancellationToken);
 }
