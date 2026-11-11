@@ -17,6 +17,7 @@ public sealed class AccountMailer(
         var link = Link("verify-email", token);
         var safeName = HtmlEncoder.Default.Encode(user.FullName);
         var safeLink = HtmlEncoder.Default.Encode(link);
+        var safeToken = HtmlEncoder.Default.Encode(token);
         var html = $"""
             <!doctype html>
             <html lang="en">
@@ -29,8 +30,8 @@ public sealed class AccountMailer(
                   <p style="margin:0 0 12px;font-size:15px;line-height:1.6">Hello {safeName},</p>
                   <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#40536d">Confirm your email address to activate your account and continue to your dashboard.</p>
                   <p style="margin:0 0 26px"><a href="{safeLink}" style="display:inline-block;padding:13px 24px;border-radius:9px;background:#0874f8;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700">Continue</a></p>
-                  <p style="margin:0 0 8px;font-size:13px;color:#52657e">Or copy this link into your browser:</p>
-                  <div style="padding:12px;border:1px solid #dce7f4;border-radius:8px;background:#f7faff;font-size:13px;line-height:1.6;overflow-wrap:anywhere;word-break:break-all;color:#075dc9">{safeLink}</div>
+                  <p style="margin:0 0 8px;font-size:13px;color:#52657e">Or copy this verification code into Invoice AI:</p>
+                  <div style="padding:14px 16px;border:1px solid #dce7f4;border-radius:8px;background:#f7faff;font-family:Consolas,Menlo,monospace;font-size:18px;line-height:1.5;letter-spacing:1px;overflow-wrap:anywhere;word-break:break-all;color:#14284a;user-select:all">{safeToken}</div>
                   <p style="margin:22px 0 0;font-size:13px;color:#687b93">This link expires in 24 hours. If you didn't create an Invoice AI account, you can ignore this email.</p>
                 </div>
               </div>
@@ -40,7 +41,7 @@ public sealed class AccountMailer(
         return new OutgoingEmail(
             user.Email,
             "Verify your Invoice AI email",
-            $"Hello {user.FullName},\n\nConfirm your email address to activate your account and continue to your dashboard.\n\nContinue: {link}\n\nOr copy this link into your browser:\n{link}\n\nThis link expires in 24 hours. If you didn't create an Invoice AI account, you can ignore this email.\n",
+            $"Hello {user.FullName},\n\nConfirm your email address to activate your account and continue to your dashboard.\n\nContinue: {link}\n\nOr copy this verification code into Invoice AI:\n{token}\n\nThis code expires in 24 hours. If you didn't create an Invoice AI account, you can ignore this email.\n",
             HtmlBody: html);
     }
 
