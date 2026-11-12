@@ -23,7 +23,7 @@ public sealed class GetCustomerSummaryHandler(
 
         return new CustomerSummaryDto(
             customer.Id, customer.Name, organization.BaseCurrencyCode,
-            totals.Invoiced, totals.Paid, open.Sum(r => r.Balance), overdue.Sum(r => r.Balance),
+            totals.Invoiced, totals.Paid, open.Sum(r => r.BaseBalance), overdue.Sum(r => r.BaseBalance),
             open.Count, overdue.Count);
     }
 }
@@ -41,24 +41,24 @@ public sealed class GetAgingHandler(
         var buckets = Enum.GetValues<AgingBucket>().Select(bucket =>
         {
             var inBucket = rows.Where(r => Aging.Classify(r.DueDate, today) == bucket).ToList();
-            return new AgingBucketDto(bucket, Aging.Label(bucket), inBucket.Count, inBucket.Sum(r => r.Balance));
+            return new AgingBucketDto(bucket, Aging.Label(bucket), inBucket.Count, inBucket.Sum(r => r.BaseBalance));
         }).ToList();
 
         decimal Sum(IEnumerable<OpenInvoiceRow> source, AgingBucket bucket)
-            => source.Where(r => Aging.Classify(r.DueDate, today) == bucket).Sum(r => r.Balance);
+            => source.Where(r => Aging.Classify(r.DueDate, today) == bucket).Sum(r => r.BaseBalance);
 
         var customerRows = rows
             .GroupBy(r => new { r.CustomerId, r.CustomerName })
             .Select(g => new CustomerAgingDto(
                 g.Key.CustomerId, g.Key.CustomerName,
                 Sum(g, AgingBucket.Current), Sum(g, AgingBucket.Days1To30), Sum(g, AgingBucket.Days31To60),
-                Sum(g, AgingBucket.Days61To90), Sum(g, AgingBucket.Over90), g.Sum(r => r.Balance)))
+                Sum(g, AgingBucket.Days61To90), Sum(g, AgingBucket.Over90), g.Sum(r => r.BaseBalance)))
             .OrderByDescending(c => c.Total)
             .ToList();
 
         var overdue = buckets.Where(b => b.Bucket != AgingBucket.Current).Sum(b => b.Balance);
 
         return new AgingReportDto(
-            today, organization.BaseCurrencyCode, rows.Sum(r => r.Balance), overdue, buckets, customerRows);
+            today, organization.BaseCurrencyCode, rows.Sum(r => r.BaseBalance), overdue, buckets, customerRows);
     }
 }

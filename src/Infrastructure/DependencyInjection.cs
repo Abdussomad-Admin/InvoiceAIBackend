@@ -59,6 +59,7 @@ public static class DependencyInjection
         services.AddScoped<ITenantWriteBypass>(sp => sp.GetRequiredService<AppDbContext>());
 
         services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+        services.AddScoped<IRecurringInvoiceRepository, RecurringInvoiceRepository>();
         services.AddScoped<IInvoiceNumberGenerator, InvoiceNumberGenerator>();
         services.AddScoped<ITransactionRunner>(sp => sp.GetRequiredService<AppDbContext>());
 
@@ -70,6 +71,7 @@ public static class DependencyInjection
         services.AddScoped<IDashboardRepository, DashboardRepository>();
 
         services.AddSingleton<IInvoicePdfRenderer, QuestPdfInvoiceRenderer>();
+        services.AddSingleton<ICreditNotePdfRenderer, QuestPdfCreditNoteRenderer>();
         services.AddSingleton<ICustomerStatementPdfRenderer, QuestPdfCustomerStatementRenderer>();
 
         services.AddScoped<ISupplierRepository, SupplierRepository>();

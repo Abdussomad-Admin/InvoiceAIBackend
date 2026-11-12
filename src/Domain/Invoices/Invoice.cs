@@ -16,6 +16,8 @@ public sealed class Invoice : BaseEntity, ITenantOwned
     public Guid CustomerId { get; private set; }
     public string? Number { get; private set; }          // assigned when issued
     public string CurrencyCode { get; private set; } = null!;
+    public string BaseCurrencyCode { get; private set; } = null!;
+    public decimal ExchangeRateToBase { get; private set; } = 1m;
     public InvoiceStatus Status { get; private set; }
     public DateOnly? IssueDate { get; private set; }
     public DateOnly? DueDate { get; private set; }
@@ -27,6 +29,7 @@ public sealed class Invoice : BaseEntity, ITenantOwned
     public decimal TaxTotal { get; private set; }
     public decimal Total { get; private set; }
     public decimal AmountPaid { get; private set; }
+    public decimal AmountCredited { get; private set; }
 
     public DateTimeOffset? VoidedAt { get; private set; }
     public string? VoidReason { get; private set; }
@@ -37,29 +40,38 @@ public sealed class Invoice : BaseEntity, ITenantOwned
     public string? PublicPaymentToken { get; private set; }
 
     public IReadOnlyList<InvoiceLine> Lines => _lines;
-    public decimal Balance => Total - AmountPaid;
+    public decimal Balance => Math.Max(0m, Total - AmountPaid - AmountCredited);
 
     public string EnsurePublicPaymentToken()
         => PublicPaymentToken ??= Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
 
     public static Invoice CreateDraft(
-        Guid organizationId, Guid customerId, string currencyCode, int paymentTermsDays, string? notes)
+        Guid organizationId, Guid customerId, string currencyCode, int paymentTermsDays, string? notes,
+        string? baseCurrencyCode = null, decimal exchangeRateToBase = 1m)
     {
         if (organizationId == Guid.Empty) throw new DomainException("OrganizationId is required.");
         if (customerId == Guid.Empty) throw new DomainException("A customer is required.");
 
+        var currency = Guard.IsoCode(currencyCode, 3, nameof(CurrencyCode));
+        var baseCurrency = Guard.IsoCode(baseCurrencyCode ?? currency, 3, nameof(BaseCurrencyCode));
+        if (currency == baseCurrency) exchangeRateToBase = 1m;
+        else if (exchangeRateToBase <= 0m || exchangeRateToBase > 1_000_000m)
+            throw new DomainException("Enter a valid exchange rate from invoice currency to workspace currency.");
         return new Invoice
         {
             OrganizationId = organizationId,
             CustomerId = customerId,
-            CurrencyCode = Guard.IsoCode(currencyCode, 3, nameof(CurrencyCode)),
+            CurrencyCode = currency,
+            BaseCurrencyCode = baseCurrency,
+            ExchangeRateToBase = decimal.Round(exchangeRateToBase, 8),
             PaymentTermsDays = ValidTerms(paymentTermsDays),
             Notes = Guard.OptionalText(notes, nameof(Notes), 2000),
             Status = InvoiceStatus.Draft
         };
     }
 
-    public void UpdateDetails(Guid customerId, int paymentTermsDays, string? notes)
+    public void UpdateDetails(Guid customerId, int paymentTermsDays, string? notes, string? currencyCode = null,
+        decimal? exchangeRateToBase = null)
     {
         EnsureDraft();
         if (customerId == Guid.Empty) throw new DomainException("A customer is required.");
@@ -67,6 +79,14 @@ public sealed class Invoice : BaseEntity, ITenantOwned
         CustomerId = customerId;
         PaymentTermsDays = ValidTerms(paymentTermsDays);
         Notes = Guard.OptionalText(notes, nameof(Notes), 2000);
+        if (currencyCode is not null)
+        {
+            var currency = Guard.IsoCode(currencyCode, 3, nameof(CurrencyCode));
+            var rate = currency == BaseCurrencyCode ? 1m : exchangeRateToBase ?? 0m;
+            if (rate <= 0m || rate > 1_000_000m) throw new DomainException("Enter a valid exchange rate from invoice currency to workspace currency.");
+            CurrencyCode = currency;
+            ExchangeRateToBase = decimal.Round(rate, 8);
+        }
     }
 
     // Replaces ALL lines and recalculates every total.
@@ -115,7 +135,7 @@ public sealed class Invoice : BaseEntity, ITenantOwned
             throw new DomainException("The payment is more than the outstanding balance.");
 
         AmountPaid += amount;
-        Status = Balance == 0m ? InvoiceStatus.Paid : InvoiceStatus.PartiallyPaid;
+        RefreshSettlementStatus();
     }
 
     public void ReversePayment(decimal amount)
@@ -128,7 +148,26 @@ public sealed class Invoice : BaseEntity, ITenantOwned
             throw new DomainException("The reversal is more than the amount paid.");
 
         AmountPaid -= amount;
-        Status = AmountPaid == 0m ? InvoiceStatus.Issued : InvoiceStatus.PartiallyPaid;
+        RefreshSettlementStatus();
+    }
+
+    public void ApplyCredit(decimal amount)
+    {
+        if (Status is not (InvoiceStatus.Issued or InvoiceStatus.PartiallyPaid or InvoiceStatus.Paid))
+            throw new DomainException("Credits can only be applied to an issued invoice.");
+        ValidateMoney(amount);
+        if (amount > Total - AmountCredited)
+            throw new DomainException("The credit exceeds the invoice amount that has not already been credited.");
+        AmountCredited += amount;
+        RefreshSettlementStatus();
+    }
+
+    private void RefreshSettlementStatus()
+    {
+        var remaining = Total - AmountPaid - AmountCredited;
+        Status = remaining <= 0m
+            ? (AmountCredited > 0m && AmountPaid == 0m ? InvoiceStatus.Credited : InvoiceStatus.Paid)
+            : (AmountPaid > 0m || AmountCredited > 0m ? InvoiceStatus.PartiallyPaid : InvoiceStatus.Issued);
     }
 
     public void Void(string reason, DateTimeOffset now)

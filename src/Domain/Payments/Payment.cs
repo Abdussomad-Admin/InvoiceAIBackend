@@ -21,6 +21,7 @@ public sealed class Payment : BaseEntity, ITenantOwned
     public Guid InvoiceId { get; private set; }
     public Guid CustomerId { get; private set; }
     public string CurrencyCode { get; private set; } = null!;
+    public decimal ExchangeRateToBase { get; private set; } = 1m;
     public decimal Amount { get; private set; }
     public DateOnly PaidOn { get; private set; }
     public PaymentMethod Method { get; private set; }
@@ -36,7 +37,8 @@ public sealed class Payment : BaseEntity, ITenantOwned
 
     public static Payment Create(
         Guid organizationId, Guid invoiceId, Guid customerId, string currencyCode, decimal amount,
-        DateOnly paidOn, PaymentMethod method, string? reference, string? notes, Guid recordedByUserId)
+        DateOnly paidOn, PaymentMethod method, string? reference, string? notes, Guid recordedByUserId,
+        decimal exchangeRateToBase = 1m)
     {
         if (organizationId == Guid.Empty || invoiceId == Guid.Empty || customerId == Guid.Empty)
             throw new DomainException("Organization, invoice and customer are required.");
@@ -48,6 +50,8 @@ public sealed class Payment : BaseEntity, ITenantOwned
             throw new DomainException("The amount can have at most 2 decimal places.");
         if (!Enum.IsDefined(method))
             throw new DomainException("Payment method is not valid.");
+        if (exchangeRateToBase <= 0m || exchangeRateToBase > 1_000_000m)
+            throw new DomainException("The exchange rate must be greater than zero.");
 
         return new Payment
         {
@@ -55,6 +59,7 @@ public sealed class Payment : BaseEntity, ITenantOwned
             InvoiceId = invoiceId,
             CustomerId = customerId,
             CurrencyCode = Guard.IsoCode(currencyCode, 3, nameof(CurrencyCode)),
+            ExchangeRateToBase = decimal.Round(exchangeRateToBase, 8),
             Amount = amount,
             PaidOn = paidOn,
             Method = method,

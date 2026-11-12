@@ -12,6 +12,8 @@ public sealed class BillPayment : BaseEntity, ITenantOwned
     public Guid BillId { get; private set; }
     public Guid SupplierId { get; private set; }
     public string CurrencyCode { get; private set; } = null!;
+    public string BaseCurrencyCode { get; private set; } = null!;
+    public decimal ExchangeRateToBase { get; private set; } = 1m;
     public decimal Amount { get; private set; }
     public DateOnly PaidOn { get; private set; }
     public PaymentMethod Method { get; private set; }
@@ -27,7 +29,8 @@ public sealed class BillPayment : BaseEntity, ITenantOwned
 
     public static BillPayment Create(
         Guid organizationId, Guid billId, Guid supplierId, string currencyCode, decimal amount,
-        DateOnly paidOn, PaymentMethod method, string? reference, string? notes, Guid recordedByUserId)
+        DateOnly paidOn, PaymentMethod method, string? reference, string? notes, Guid recordedByUserId,
+        string? baseCurrencyCode = null, decimal exchangeRateToBase = 1m)
     {
         if (organizationId == Guid.Empty || billId == Guid.Empty || supplierId == Guid.Empty)
             throw new DomainException("Organization, bill and supplier are required.");
@@ -39,13 +42,20 @@ public sealed class BillPayment : BaseEntity, ITenantOwned
             throw new DomainException("The amount can have at most 2 decimal places.");
         if (!Enum.IsDefined(method))
             throw new DomainException("Payment method is not valid.");
+        var currency = Guard.IsoCode(currencyCode, 3, nameof(CurrencyCode));
+        var baseCurrency = Guard.IsoCode(baseCurrencyCode ?? currency, 3, nameof(BaseCurrencyCode));
+        if (currency == baseCurrency) exchangeRateToBase = 1m;
+        else if (exchangeRateToBase <= 0m || exchangeRateToBase > 1_000_000m)
+            throw new DomainException("Enter a valid exchange rate from payment currency to workspace currency.");
 
         return new BillPayment
         {
             OrganizationId = organizationId,
             BillId = billId,
             SupplierId = supplierId,
-            CurrencyCode = Guard.IsoCode(currencyCode, 3, nameof(CurrencyCode)),
+            CurrencyCode = currency,
+            BaseCurrencyCode = baseCurrency,
+            ExchangeRateToBase = decimal.Round(exchangeRateToBase, 8),
             Amount = amount,
             PaidOn = paidOn,
             Method = method,

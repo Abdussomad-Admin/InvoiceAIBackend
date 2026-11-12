@@ -16,6 +16,8 @@ public class BillPaymentConfiguration : IEntityTypeConfiguration<BillPayment>
         builder.Property(p => p.Id).ValueGeneratedNever();
 
         builder.Property(p => p.CurrencyCode).IsRequired().HasMaxLength(3).IsFixedLength();
+        builder.Property(p => p.BaseCurrencyCode).IsRequired().HasMaxLength(3).IsFixedLength();
+        builder.Property(p => p.ExchangeRateToBase).HasPrecision(18, 8);
         builder.Property(p => p.Amount).HasPrecision(18, 2);
         builder.Property(p => p.Method).HasConversion<string>().IsRequired().HasMaxLength(30);
         builder.Property(p => p.Reference).HasMaxLength(100);

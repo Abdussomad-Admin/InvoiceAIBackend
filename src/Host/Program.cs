@@ -117,6 +117,7 @@ builder.Services.AddScoped<ICurrentOrganization, HttpContextCurrentOrganization>
 builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 builder.Services.AddScoped<EmailOutboxProcessor>();
 builder.Services.AddHostedService<EmailOutboxWorker>();
+builder.Services.AddHostedService<RecurringInvoiceWorker>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

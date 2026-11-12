@@ -19,6 +19,8 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         builder.HasIndex(i => i.PublicPaymentToken).IsUnique();
         builder.Property(c => c.LastSentTo).HasMaxLength(254);
         builder.Property(i => i.CurrencyCode).IsRequired().HasMaxLength(3).IsFixedLength();
+        builder.Property(i => i.BaseCurrencyCode).IsRequired().HasMaxLength(3).IsFixedLength();
+        builder.Property(i => i.ExchangeRateToBase).HasPrecision(18, 8);
         builder.Property(i => i.Status).HasConversion<string>().IsRequired().HasMaxLength(30);
         builder.Property(i => i.Notes).HasMaxLength(2000);
         builder.Property(i => i.VoidReason).HasMaxLength(500);

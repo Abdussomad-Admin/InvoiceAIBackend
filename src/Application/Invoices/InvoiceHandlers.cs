@@ -49,7 +49,8 @@ internal static class InvoiceMapping
     public static InvoiceDto ToDto(this Invoice i, string customerName, DateOnly today) => new(
     i.Id, i.Number, i.CustomerId, customerName, i.CurrencyCode, i.Status, i.IssueDate, i.DueDate,
     i.PaymentTermsDays, i.Notes, i.Subtotal, i.DiscountTotal, i.TaxTotal, i.Total,
-    i.AmountPaid, i.Balance, i.IsOverdue(today), i.DaysOverdue(today), i.VoidReason,
+    i.AmountPaid, i.AmountCredited, i.Balance, i.BaseCurrencyCode, i.ExchangeRateToBase,
+    i.IsOverdue(today), i.DaysOverdue(today), i.VoidReason,
     i.Lines.OrderBy(l => l.Position).Select(l => new InvoiceLineDto(
         l.Position, l.Description, l.Quantity, l.UnitPrice, l.DiscountPercent, l.TaxRatePercent,
         l.LineSubtotal, l.DiscountAmount, l.TaxAmount, l.LineTotal)).ToList(),
@@ -66,10 +67,14 @@ public sealed class CreateInvoiceHandler(
         var organization = await InvoiceLookups.OrganizationAsync(organizations, currentOrganization, cancellationToken);
         if (planLimits is not null) await planLimits.EnsureInvoiceCapacityAsync(cancellationToken);
         var customer = await InvoiceLookups.ActiveCustomerAsync(customers, input.CustomerId, cancellationToken);
+        var currencyCode = (input.CurrencyCode ?? organization.BaseCurrencyCode).Trim().ToUpperInvariant();
+        if (currencyCode != organization.BaseCurrencyCode && input.ExchangeRateToBase is null)
+            throw new DomainException($"Enter the {currencyCode} to {organization.BaseCurrencyCode} exchange rate for this invoice.");
 
         var invoice = Invoice.CreateDraft(
-            organization.Id, customer.Id, organization.BaseCurrencyCode,
-            input.PaymentTermsDays ?? organization.DefaultPaymentTermsDays, input.Notes);
+            organization.Id, customer.Id, currencyCode,
+            input.PaymentTermsDays ?? organization.DefaultPaymentTermsDays, input.Notes,
+            organization.BaseCurrencyCode, input.ExchangeRateToBase ?? 1m);
         invoice.ReplaceLines(InvoiceLookups.ToLineInputs(input));
 
         invoices.Add(invoice);
@@ -90,7 +95,8 @@ public sealed class UpdateInvoiceHandler(
             ?? throw new NotFoundException("Invoice not found.");
         var customer = await InvoiceLookups.ActiveCustomerAsync(customers, input.CustomerId, cancellationToken);
 
-        invoice.UpdateDetails(customer.Id, input.PaymentTermsDays ?? invoice.PaymentTermsDays, input.Notes);
+        invoice.UpdateDetails(customer.Id, input.PaymentTermsDays ?? invoice.PaymentTermsDays, input.Notes,
+            input.CurrencyCode, input.ExchangeRateToBase);
         invoice.ReplaceLines(InvoiceLookups.ToLineInputs(input));
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -183,4 +189,38 @@ public sealed class ExportInvoicesHandler(IInvoiceRepository invoices)
 {
     public Task<IReadOnlyList<InvoiceExportRow>> Handle(CancellationToken cancellationToken)
         => invoices.ExportAsync(cancellationToken);
+}
+
+public sealed class CreditNoteHandlers(IInvoiceRepository invoices, IOrganizationRepository organizations,
+    ICurrentOrganization current, IUnitOfWork unitOfWork, ITransactionRunner transactions, TimeProvider clock)
+{
+    public async Task<IReadOnlyList<CreditNoteDto>> List(Guid invoiceId, CancellationToken ct)
+    {
+        _ = await InvoiceLookups.OrganizationAsync(organizations, current, ct);
+        _ = await invoices.GetByIdAsync(invoiceId, ct) ?? throw new NotFoundException("Invoice not found.");
+        return await invoices.CreditNotesAsync(invoiceId, ct);
+    }
+
+    public async Task<CreditNoteDto> Create(Guid invoiceId, CreateCreditNoteCommand command, CancellationToken ct)
+    {
+        var organization = await InvoiceLookups.OrganizationAsync(organizations, current, ct);
+        CreditNote? created = null;
+        await transactions.RunInTransactionAsync(async () =>
+        {
+            if (!await invoices.LockAsync(invoiceId, ct)) throw new NotFoundException("Invoice not found.");
+            var invoice = await invoices.GetByIdAsync(invoiceId, ct) ?? throw new NotFoundException("Invoice not found.");
+            if (invoice.Status is InvoiceStatus.Draft or InvoiceStatus.Void)
+                throw new DomainException("A credit note can only be issued for an active invoice.");
+            invoice.ApplyCredit(command.Amount);
+            var number = $"CN-{Guid.NewGuid():N}"[..15].ToUpperInvariant();
+            created = CreditNote.Create(organization.Id, invoice.Id, number, invoice.CurrencyCode,
+                invoice.BaseCurrencyCode, invoice.ExchangeRateToBase,
+                command.Amount, command.Reason, InvoiceLookups.Today(organization, clock));
+            invoices.AddCreditNote(created);
+            await unitOfWork.SaveChangesAsync(ct);
+        }, ct);
+        return new CreditNoteDto(created!.Id, created.InvoiceId, "", created.Number, created.CurrencyCode,
+            created.BaseCurrencyCode, created.ExchangeRateToBase,
+            created.Amount, created.Reason, created.IssuedOn, created.CreatedAt);
+    }
 }

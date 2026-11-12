@@ -50,6 +50,7 @@ public class BillPaymentRepository(AppDbContext context) : IBillPaymentRepositor
         var items = rows.Select(x => new BillPaymentDto(
             x.Payment.Id, x.Payment.BillId, x.BillNumber, x.Payment.SupplierId, x.SupplierName,
             x.Payment.Amount, x.Payment.CurrencyCode, x.Payment.PaidOn, x.Payment.Method,
+            x.Payment.BaseCurrencyCode, x.Payment.ExchangeRateToBase,
             x.Payment.Reference, x.Payment.Notes, x.Payment.RecordedByUserId, x.Payment.CreatedAt,
             x.Payment.IsReversed, x.Payment.ReversedAt, x.Payment.ReversalReason)).ToList();
 

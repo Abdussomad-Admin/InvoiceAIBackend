@@ -36,7 +36,8 @@ public static class Aging
 }
 
 public sealed record OpenInvoiceRow(
-    Guid InvoiceId, string? Number, Guid CustomerId, string CustomerName, DateOnly DueDate, decimal Balance);
+    Guid InvoiceId, string? Number, Guid CustomerId, string CustomerName, DateOnly DueDate,
+    string CurrencyCode, decimal Balance, decimal BaseBalance);
 
 public sealed record CustomerTotals(decimal Invoiced, decimal Paid);
 

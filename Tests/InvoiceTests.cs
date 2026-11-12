@@ -98,6 +98,46 @@ public class InvoiceTests
     }
 
     [Fact]
+    public void CreditNotes_ApplyToBalanceAndCannotExceedInvoiceTotal()
+    {
+        var invoice = NewDraft();
+        invoice.ReplaceLines([new LineInput("Service", 1m, 100m)]);
+        invoice.Issue("INV-CREDIT", new DateOnly(2026, 1, 15));
+
+        invoice.ApplyCredit(30m);
+        Assert.Equal(70m, invoice.Balance);
+        Assert.Equal(InvoiceStatus.PartiallyPaid, invoice.Status);
+        invoice.ApplyCredit(70m);
+        Assert.Equal(0m, invoice.Balance);
+        Assert.Equal(InvoiceStatus.Credited, invoice.Status);
+        Assert.Throws<DomainException>(() => invoice.ApplyCredit(0.01m));
+    }
+
+    [Fact]
+    public void Invoice_StoresCurrencyAndImmutableBaseRateSnapshot()
+    {
+        var invoice = Invoice.CreateDraft(Guid.NewGuid(), Guid.NewGuid(), "usd", 30, null, "ngn", 1500.123456789m);
+        invoice.ReplaceLines([new LineInput("Service", 1m, 10m)]);
+
+        Assert.Equal("USD", invoice.CurrencyCode);
+        Assert.Equal("NGN", invoice.BaseCurrencyCode);
+        Assert.Equal(1500.12345679m, invoice.ExchangeRateToBase);
+        Assert.Throws<DomainException>(() => Invoice.CreateDraft(Guid.NewGuid(), Guid.NewGuid(), "USD", 30, null, "NGN", 0m));
+    }
+
+    [Fact]
+    public void RecurringSchedule_AdvancesMonthlyDatesAndStoresLines()
+    {
+        var schedule = RecurringInvoiceSchedule.Create(Guid.NewGuid(), Guid.NewGuid(), "Monthly retainer",
+            "USD", "NGN", 1500m, [new LineInput("Design", 1m, 100m)], RecurrenceFrequency.Monthly,
+            new DateOnly(2027, 1, 31), 30);
+
+        Assert.Single(schedule.Lines());
+        Assert.Equal(new DateOnly(2027, 1, 31), schedule.Advance());
+        Assert.Equal(new DateOnly(2027, 2, 28), schedule.NextRunOn);
+    }
+
+    [Fact]
     public void Issue_WithoutLines_Throws()
     {
         var invoice = NewDraft();

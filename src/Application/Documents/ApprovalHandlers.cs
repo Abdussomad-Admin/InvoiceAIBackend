@@ -47,6 +47,9 @@ public sealed class ApproveDocumentHandler(
 
             document.EnsureCanApprove();
             EnsureCurrencyAcknowledged(document, organization, command);
+            var currencyCode = (command.CurrencyCode ?? organization.BaseCurrencyCode).Trim().ToUpperInvariant();
+            if (currencyCode != organization.BaseCurrencyCode && command.ExchangeRateToBase is null)
+                throw new DomainException($"Enter the {currencyCode} to {organization.BaseCurrencyCode} exchange rate for this bill.");
 
             Supplier supplier;
             var created = false;
@@ -65,8 +68,9 @@ public sealed class ApproveDocumentHandler(
             var dueDate = command.DueDate ?? command.BillDate.AddDays(supplier.DefaultPaymentTermsDays);
 
             var bill = SupplierBill.CreateDraft(
-                organization.Id, supplier.Id, organization.BaseCurrencyCode,
-                command.Number, command.BillDate, dueDate, command.Notes);
+                organization.Id, supplier.Id, currencyCode,
+                command.Number, command.BillDate, dueDate, command.Notes,
+                organization.BaseCurrencyCode, command.ExchangeRateToBase ?? 1m);
 
             bill.ReplaceLines(command.Lines.Select(l =>
                 new LineInput(l.Description, l.Quantity, l.UnitPrice, l.DiscountPercent, l.TaxRatePercent)));
@@ -122,10 +126,11 @@ public sealed class ApproveDocumentHandler(
         var extracted = JsonSerializer.Deserialize<ExtractedBill>(json, ExtractDocumentHandler.StoredJson);
 
         if (extracted?.CurrencyCode is { } currency &&
-            currency != organization.BaseCurrencyCode && !command.ConfirmCurrencyIsBase)
+            currency != organization.BaseCurrencyCode &&
+            !string.Equals(command.CurrencyCode, currency, StringComparison.OrdinalIgnoreCase) &&
+            !command.ConfirmCurrencyIsBase)
             throw new DomainException(
-                $"The document appears to be in {currency}, but bills are recorded in {organization.BaseCurrencyCode}. " +
-                $"If the amounts you entered are already in {organization.BaseCurrencyCode}, send confirmCurrencyIsBase as true.");
+                $"The document appears to be in {currency}. Confirm that currency or choose {organization.BaseCurrencyCode} if you converted the amounts.");
     }
 
     private static string Money(decimal amount) => amount.ToString("0.00", CultureInfo.InvariantCulture);

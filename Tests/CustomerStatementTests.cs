@@ -36,7 +36,13 @@ public class CustomerStatementTests
         public Task<(IReadOnlyList<Customer> Items, int Total)> SearchAsync(
             string? search, bool includeArchived, int skip, int take, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+        public Task<IReadOnlyList<Customer>> ExportAsync(CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+        public Task<HashSet<string>> ExistingEmailsAsync(
+            IReadOnlyCollection<string> emails, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
         public void Add(Customer value) => throw new NotSupportedException();
+        public void AddRange(IReadOnlyCollection<Customer> values) => throw new NotSupportedException();
     }
 
     private sealed class InMemoryOrganizations(Organization organization) : IOrganizationRepository
@@ -90,7 +96,7 @@ public class CustomerStatementTests
         var voidedAt = new DateTimeOffset(2026, 1, 15, 10, 0, 0, TimeSpan.Zero);
         var reversedAt = new DateTimeOffset(2026, 1, 15, 10, 15, 0, TimeSpan.Zero);
         var data = new CustomerStatementData(
-            new CustomerStatementOpeningParts(300m, 50m, 100m, 25m),
+            new CustomerStatementOpeningParts(300m, 50m, 100m, 25m, 0m),
             [
                 new CustomerStatementInvoiceRow(Guid.NewGuid(), "INV-0002", Today, 200m, "NGN", null),
                 new CustomerStatementInvoiceRow(Guid.NewGuid(), "INV-0001", Today.AddDays(-1), 50m, "NGN", voidedAt)
@@ -98,7 +104,7 @@ public class CustomerStatementTests
             [
                 new CustomerStatementPaymentRow(Guid.NewGuid(), Today, 30m, "NGN", Domain.Payments.PaymentMethod.BankTransfer, "PAY-2", null),
                 new CustomerStatementPaymentRow(Guid.NewGuid(), Today.AddDays(-1), 25m, "NGN", Domain.Payments.PaymentMethod.Card, "PAY-1", reversedAt)
-            ]);
+            ], []);
         var handler = new GetCustomerStatementHandler(
             new InMemoryCustomers(customer), new InMemoryStatements(data),
             new InMemoryOrganizations(organization), new TestCurrentOrganization(organization.Id), Clock);

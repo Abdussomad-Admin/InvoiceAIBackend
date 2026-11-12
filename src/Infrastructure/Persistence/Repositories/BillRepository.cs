@@ -74,6 +74,8 @@ public class BillRepository(AppDbContext context) : IBillRepository
                 x.Bill.SupplierId,
                 x.SupplierName,
                 x.Bill.CurrencyCode,
+                x.Bill.BaseCurrencyCode,
+                x.Bill.ExchangeRateToBase,
                 x.Bill.Status,
                 x.Bill.BillDate,
                 x.Bill.DueDate,
@@ -83,7 +85,8 @@ public class BillRepository(AppDbContext context) : IBillRepository
             .ToListAsync(cancellationToken);
 
         var items = rows.Select(r => new BillSummaryDto(
-            r.Id, r.Number, r.SupplierId, r.SupplierName, r.CurrencyCode, r.Status, r.BillDate, r.DueDate,
+            r.Id, r.Number, r.SupplierId, r.SupplierName, r.CurrencyCode, r.BaseCurrencyCode, r.ExchangeRateToBase,
+            r.Status, r.BillDate, r.DueDate,
             r.Total, r.AmountPaid, r.Total - r.AmountPaid,
             r.Status is BillStatus.Open or BillStatus.PartiallyPaid && r.DueDate < today)).ToList();
 

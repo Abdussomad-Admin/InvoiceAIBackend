@@ -55,6 +55,27 @@ public sealed class InvoicePaymentWebhookProcessor(
         await transaction.CommitAsync(ct);
     }
 
+    public async Task ProcessRefundUpdate(JsonElement data, string eventName, CancellationToken ct)
+    {
+        if (!TryString(data, "refund_reference", out var reference)) return;
+        var refund = await db.CreditNoteRefunds.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.ProviderReference == reference && x.Channel == CreditNoteRefundChannel.Paystack, ct);
+        if (refund is null || !TryString(data, "transaction_reference", out var transactionReference)) return;
+        var payment = await db.Payments.IgnoreQueryFilters().AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == refund.PaymentId && x.OrganizationId == refund.OrganizationId, ct);
+        if (payment is null || payment.Reference != transactionReference) return;
+        if (TryString(data, "currency", out var currency)
+            && !string.Equals(currency, refund.CurrencyCode, StringComparison.OrdinalIgnoreCase)) return;
+        if (TryAmountMinor(data, "amount", out var amountMinor)
+            && amountMinor != decimal.ToInt64(decimal.Round(refund.Amount * 100m, 0, MidpointRounding.AwayFromZero))) return;
+
+        var status = eventName.StartsWith("refund.", StringComparison.Ordinal)
+            ? eventName["refund.".Length..]
+            : TryString(data, "status", out var returnedStatus) ? returnedStatus : "pending";
+        refund.ApplyProviderStatus(status, null, clock.GetUtcNow());
+        await db.SaveChangesAsync(ct);
+    }
+
     private static bool TryString(JsonElement value, string key, out string result)
     {
         result = "";
@@ -66,5 +87,16 @@ public sealed class InvoicePaymentWebhookProcessor(
     {
         result = 0;
         return value.ValueKind == JsonValueKind.Object && value.TryGetProperty(key, out var element) && element.TryGetInt64(out result);
+    }
+
+    private static bool TryAmountMinor(JsonElement value, string key, out long result)
+    {
+        result = 0;
+        if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty(key, out var element)) return false;
+        return element.ValueKind == JsonValueKind.Number
+            ? element.TryGetInt64(out result)
+            : element.ValueKind == JsonValueKind.String
+              && long.TryParse(element.GetString(), System.Globalization.NumberStyles.None,
+                  System.Globalization.CultureInfo.InvariantCulture, out result);
     }
 }

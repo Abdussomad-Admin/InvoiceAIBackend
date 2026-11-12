@@ -38,6 +38,9 @@ public class AppDbContext(
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<CreditNote> CreditNotes => Set<CreditNote>();
+    public DbSet<CreditNoteRefund> CreditNoteRefunds => Set<CreditNoteRefund>();
+    public DbSet<RecurringInvoiceSchedule> RecurringInvoiceSchedules => Set<RecurringInvoiceSchedule>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
     public DbSet<EmailOutboxMessage> EmailOutbox => Set<EmailOutboxMessage>();
@@ -175,6 +178,10 @@ public class AppDbContext(
             case Invoice i when added:
                 return new(i.OrganizationId, "Invoice.Created", "Invoice", i.Id, $"Total {Fmt(i.Total)} {i.CurrencyCode}");
 
+            case CreditNote c when added:
+                return new(c.OrganizationId, "CreditNote.Issued", "CreditNote", c.Id,
+                    $"{c.Number}; {Fmt(c.Amount)} {c.CurrencyCode}; invoice {c.InvoiceId}");
+
             case Invoice i:
                 {
                     var status = entry.Property(nameof(Invoice.Status));
@@ -202,7 +209,7 @@ public class AppDbContext(
 
             case Payment p when added:
                 return new(p.OrganizationId, "Payment.Recorded", "Payment", p.Id,
-                    $"{Fmt(p.Amount)} {p.CurrencyCode} on invoice {p.InvoiceId} via {p.Method}");
+                    $"{Fmt(p.Amount)} {p.CurrencyCode} at {p.ExchangeRateToBase}; invoice {p.InvoiceId} via {p.Method}");
 
             case Payment p:
                 return Changed(entry.Property(nameof(Payment.ReversedAt)))

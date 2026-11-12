@@ -13,7 +13,7 @@ internal static class BillPaymentMapping
 {
     public static BillPaymentDto ToDto(this BillPayment p, string billNumber, string supplierName) => new(
         p.Id, p.BillId, billNumber, p.SupplierId, supplierName, p.Amount, p.CurrencyCode,
-        p.PaidOn, p.Method, p.Reference, p.Notes, p.RecordedByUserId, p.CreatedAt,
+        p.PaidOn, p.Method, p.BaseCurrencyCode, p.ExchangeRateToBase, p.Reference, p.Notes, p.RecordedByUserId, p.CreatedAt,
         p.IsReversed, p.ReversedAt, p.ReversalReason);
 }
 
@@ -53,9 +53,14 @@ public sealed class RecordBillPaymentHandler(
 
             bill.ApplyPayment(command.Amount);
 
+            var exchangeRate = bill.CurrencyCode == bill.BaseCurrencyCode
+                ? 1m
+                : command.ExchangeRateToBase ?? throw new DomainException(
+                    $"Enter the {bill.CurrencyCode} to {bill.BaseCurrencyCode} exchange rate for this payment.");
+
             payment = BillPayment.Create(
                 organization.Id, bill.Id, bill.SupplierId, bill.CurrencyCode, command.Amount,
-                paidOn, command.Method, reference, command.Notes, actorId);
+                paidOn, command.Method, reference, command.Notes, actorId, bill.BaseCurrencyCode, exchangeRate);
             payments.Add(payment);
 
             await unitOfWork.SaveChangesAsync(cancellationToken);

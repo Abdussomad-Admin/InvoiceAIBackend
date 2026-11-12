@@ -19,7 +19,9 @@ public class InvoicesController(
     SendInvoiceHandler send,
     GetInvoiceHandler get,
     GetInvoicePdfHandler pdf,
+    GetCreditNotePdfHandler creditNotePdf,
     ListInvoicesHandler list,
+    CreditNoteHandlers creditNotes,
     ExportInvoicesHandler export) : ControllerBase
 {
     [HttpGet]
@@ -102,4 +104,24 @@ public class InvoicesController(
     [Authorize(Policy = nameof(Permission.IssueInvoices))]
     public async Task<ActionResult<InvoiceDto>> Void(Guid id, VoidInvoiceCommand command, CancellationToken ct)
         => Ok(await voidInvoice.Handle(id, command, ct));
+
+    [HttpGet("{id:guid}/credit-notes")]
+    [Authorize(Policy = nameof(Permission.ViewData))]
+    public async Task<ActionResult<IReadOnlyList<CreditNoteDto>>> CreditNotes(Guid id, CancellationToken ct)
+        => Ok(await creditNotes.List(id, ct));
+
+    [HttpPost("{id:guid}/credit-notes")]
+    [Authorize(Policy = nameof(Permission.IssueInvoices))]
+    public async Task<ActionResult<CreditNoteDto>> CreateCreditNote(Guid id, CreateCreditNoteCommand command, CancellationToken ct)
+        => Ok(await creditNotes.Create(id, command, ct));
+
+    [HttpGet("{id:guid}/credit-notes/{creditNoteId:guid}/pdf")]
+    [Authorize(Policy = nameof(Permission.ViewData))]
+    public async Task<IActionResult> CreditNotePdf(Guid id, Guid creditNoteId, CancellationToken ct)
+    {
+        var note = await creditNotes.List(id, ct);
+        if (note.All(x => x.Id != creditNoteId)) return NotFound();
+        var file = await creditNotePdf.Handle(creditNoteId, ct);
+        return File(file.Content, "application/pdf", file.FileName);
+    }
 }

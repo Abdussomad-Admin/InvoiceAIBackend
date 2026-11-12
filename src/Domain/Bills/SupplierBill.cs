@@ -16,6 +16,8 @@ public sealed class SupplierBill : BaseEntity, ITenantOwned
     public string Number { get; private set; } = null!;       // the supplier's invoice number, as printed
     public string NumberKey { get; private set; } = null!;    // normalized, used to detect duplicates
     public string CurrencyCode { get; private set; } = null!;
+    public string BaseCurrencyCode { get; private set; } = null!;
+    public decimal ExchangeRateToBase { get; private set; } = 1m;
     public BillStatus Status { get; private set; }
     public DateOnly BillDate { get; private set; }
     public DateOnly DueDate { get; private set; }
@@ -43,11 +45,18 @@ public sealed class SupplierBill : BaseEntity, ITenantOwned
 
     public static SupplierBill CreateDraft(
         Guid organizationId, Guid supplierId, string currencyCode, string number,
-        DateOnly billDate, DateOnly dueDate, string? notes)
+        DateOnly billDate, DateOnly dueDate, string? notes,
+        string? baseCurrencyCode = null, decimal exchangeRateToBase = 1m)
     {
         if (organizationId == Guid.Empty) throw new DomainException("OrganizationId is required.");
         if (supplierId == Guid.Empty) throw new DomainException("A supplier is required.");
         if (dueDate < billDate) throw new DomainException("The due date cannot be before the bill date.");
+
+        var currency = Guard.IsoCode(currencyCode, 3, nameof(CurrencyCode));
+        var baseCurrency = Guard.IsoCode(baseCurrencyCode ?? currency, 3, nameof(BaseCurrencyCode));
+        if (currency == baseCurrency) exchangeRateToBase = 1m;
+        else if (exchangeRateToBase <= 0m || exchangeRateToBase > 1_000_000m)
+            throw new DomainException("Enter a valid exchange rate from bill currency to workspace currency.");
 
         return new SupplierBill
         {
@@ -55,7 +64,9 @@ public sealed class SupplierBill : BaseEntity, ITenantOwned
             SupplierId = supplierId,
             Number = Guard.NotBlank(number, nameof(Number), 100),
             NumberKey = KeyFor(number),
-            CurrencyCode = Guard.IsoCode(currencyCode, 3, nameof(CurrencyCode)),
+            CurrencyCode = currency,
+            BaseCurrencyCode = baseCurrency,
+            ExchangeRateToBase = decimal.Round(exchangeRateToBase, 8),
             BillDate = billDate,
             DueDate = dueDate,
             Notes = Guard.OptionalText(notes, nameof(Notes), 2000),
@@ -63,7 +74,8 @@ public sealed class SupplierBill : BaseEntity, ITenantOwned
         };
     }
 
-    public void UpdateDetails(Guid supplierId, string number, DateOnly billDate, DateOnly dueDate, string? notes)
+    public void UpdateDetails(Guid supplierId, string number, DateOnly billDate, DateOnly dueDate, string? notes,
+        string? currencyCode = null, decimal? exchangeRateToBase = null)
     {
         EnsureDraft();
         if (supplierId == Guid.Empty) throw new DomainException("A supplier is required.");
@@ -75,6 +87,15 @@ public sealed class SupplierBill : BaseEntity, ITenantOwned
         BillDate = billDate;
         DueDate = dueDate;
         Notes = Guard.OptionalText(notes, nameof(Notes), 2000);
+        if (currencyCode is not null)
+        {
+            var currency = Guard.IsoCode(currencyCode, 3, nameof(CurrencyCode));
+            var rate = currency == BaseCurrencyCode ? 1m : exchangeRateToBase ?? 0m;
+            if (rate <= 0m || rate > 1_000_000m)
+                throw new DomainException("Enter a valid exchange rate from bill currency to workspace currency.");
+            CurrencyCode = currency;
+            ExchangeRateToBase = decimal.Round(rate, 8);
+        }
     }
 
     // Replaces ALL lines and recalculates every total.

@@ -4,7 +4,8 @@ using Domain.Payments;
 namespace Application.Bills;
 
 public sealed record RecordBillPaymentCommand(
-    decimal Amount, DateOnly? PaidOn, PaymentMethod Method, string? Reference, string? Notes);
+    decimal Amount, DateOnly? PaidOn, PaymentMethod Method, string? Reference, string? Notes,
+    decimal? ExchangeRateToBase = null);
 
 public sealed record ReverseBillPaymentCommand(string Reason);
 
@@ -17,6 +18,7 @@ public sealed record BillPaymentSearch(
 public sealed record BillPaymentDto(
     Guid Id, Guid BillId, string BillNumber, Guid SupplierId, string SupplierName,
     decimal Amount, string CurrencyCode, DateOnly PaidOn, PaymentMethod Method,
+    string BaseCurrencyCode, decimal ExchangeRateToBase,
     string? Reference, string? Notes, Guid RecordedByUserId, DateTimeOffset CreatedAt,
     bool IsReversed, DateTimeOffset? ReversedAt, string? ReversalReason);
 

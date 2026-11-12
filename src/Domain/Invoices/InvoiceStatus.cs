@@ -6,5 +6,6 @@ public enum InvoiceStatus
     Issued = 1,
     PartiallyPaid = 2,
     Paid = 3,
-    Void = 4
+    Void = 4,
+    Credited = 5
 }

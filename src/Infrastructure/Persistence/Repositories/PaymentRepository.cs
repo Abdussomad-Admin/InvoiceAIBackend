@@ -49,7 +49,7 @@ public class PaymentRepository(AppDbContext context) : IPaymentRepository
 
         var items = rows.Select(x => new PaymentDto(
             x.Payment.Id, x.Payment.InvoiceId, x.InvoiceNumber, x.Payment.CustomerId, x.CustomerName,
-            x.Payment.Amount, x.Payment.CurrencyCode, x.Payment.PaidOn, x.Payment.Method,
+            x.Payment.Amount, x.Payment.CurrencyCode, x.Payment.ExchangeRateToBase, x.Payment.PaidOn, x.Payment.Method,
             x.Payment.Reference, x.Payment.Notes, x.Payment.RecordedByUserId, x.Payment.CreatedAt,
             x.Payment.IsReversed, x.Payment.ReversedAt, x.Payment.ReversalReason)).ToList();
 

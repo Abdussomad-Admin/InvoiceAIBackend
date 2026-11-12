@@ -55,7 +55,7 @@ internal static class FinancialCalculator
 
         return new FinancialPeriodDto(
             from, to,
-            income, sales.Sum(x => x.Tax), sales.Count,
+            income, sales.Sum(x => x.Tax), sales.Count(x => x.Gross >= 0m),
             expenses, billed.Sum(x => x.Tax), billed.Count,
             income - expenses, expenses > income,
             received, paidOut, received - paidOut);

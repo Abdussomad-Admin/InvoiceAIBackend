@@ -68,6 +68,24 @@ public class InvoiceRepository(AppDbContext context) : IInvoiceRepository
 
     public void Add(Invoice invoice) => context.Invoices.Add(invoice);
 
+    public async Task<IReadOnlyList<CreditNoteDto>> CreditNotesAsync(Guid invoiceId, CancellationToken cancellationToken = default)
+        => await context.CreditNotes.AsNoTracking().Where(c => c.InvoiceId == invoiceId)
+            .OrderByDescending(c => c.IssuedOn).Select(c => new CreditNoteDto(c.Id, c.InvoiceId,
+                context.Invoices.Where(i => i.Id == c.InvoiceId).Select(i => i.Number ?? "").FirstOrDefault() ?? "",
+                c.Number, c.CurrencyCode, c.BaseCurrencyCode, c.ExchangeRateToBase,
+                c.Amount, c.Reason, c.IssuedOn, c.CreatedAt))
+            .ToListAsync(cancellationToken);
+
+    public async Task<CreditNoteDto?> CreditNoteByIdAsync(Guid creditNoteId, CancellationToken cancellationToken = default)
+        => await context.CreditNotes.AsNoTracking().Where(c => c.Id == creditNoteId)
+            .Select(c => new CreditNoteDto(c.Id, c.InvoiceId,
+                context.Invoices.Where(i => i.Id == c.InvoiceId).Select(i => i.Number ?? "").FirstOrDefault() ?? "",
+                c.Number, c.CurrencyCode, c.BaseCurrencyCode, c.ExchangeRateToBase,
+                c.Amount, c.Reason, c.IssuedOn, c.CreatedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public void AddCreditNote(CreditNote creditNote) => context.CreditNotes.Add(creditNote);
+
     public async Task<IReadOnlyList<InvoiceExportRow>> ExportAsync(CancellationToken cancellationToken = default)
         => await (from invoice in context.Invoices.AsNoTracking()
                   join customer in context.Customers.AsNoTracking() on invoice.CustomerId equals customer.Id

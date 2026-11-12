@@ -3,7 +3,8 @@
 namespace Application.Payments;
 
 public sealed record RecordPaymentCommand(
-    decimal Amount, DateOnly? PaidOn, PaymentMethod Method, string? Reference, string? Notes);
+    decimal Amount, DateOnly? PaidOn, PaymentMethod Method, string? Reference, string? Notes,
+    decimal? ExchangeRateToBase = null);
 
 public sealed record ReversePaymentCommand(string Reason);
 
@@ -15,7 +16,7 @@ public sealed record PaymentSearch(
 
 public sealed record PaymentDto(
     Guid Id, Guid InvoiceId, string? InvoiceNumber, Guid CustomerId, string CustomerName,
-    decimal Amount, string CurrencyCode, DateOnly PaidOn, PaymentMethod Method,
+    decimal Amount, string CurrencyCode, decimal ExchangeRateToBase, DateOnly PaidOn, PaymentMethod Method,
     string? Reference, string? Notes, Guid RecordedByUserId, DateTimeOffset CreatedAt,
     bool IsReversed, DateTimeOffset? ReversedAt, string? ReversalReason);
 

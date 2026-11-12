@@ -51,6 +51,36 @@ public sealed class BillingController(
                 plan.MemberLimit, plan.AiExtractionLimit, plan.StorageLimitBytes } });
     }
 
+    [HttpGet("api/billing/history")]
+    [Authorize(Policy = nameof(Permission.ViewData))]
+    public async Task<IActionResult> History(CancellationToken ct)
+    {
+        var subscription = await db.OrganizationSubscriptions.AsNoTracking().SingleOrDefaultAsync(ct);
+        var checkouts = await db.BillingCheckouts.AsNoTracking()
+            .OrderByDescending(x => x.CreatedAt)
+            .Take(50)
+            .Select(x => new { x.Id, x.PlanCode, x.CurrencyCode, x.AmountMinor, x.Status, x.CreatedAt })
+            .ToListAsync(ct);
+
+        var plan = subscription is null
+            ? billing.Plans.FirstOrDefault(p => p.IsFree)
+            : billing.Plans.FirstOrDefault(p => p.Code == subscription.PlanCode);
+        return Ok(new
+        {
+            subscription = subscription is null
+                ? new { status = "Free", planCode = (string?)plan?.Code, planName = plan?.Name,
+                    currencyCode = (string?)null, amountMinor = (long?)null,
+                    currentPeriodStart = (DateTimeOffset?)null, currentPeriodEnd = (DateTimeOffset?)null,
+                    canCancel = false }
+                : new { status = subscription.Status.ToString(), planCode = (string?)subscription.PlanCode,
+                    planName = plan?.Name, currencyCode = (string?)subscription.CurrencyCode,
+                    amountMinor = (long?)subscription.AmountMinor, currentPeriodStart = subscription.CurrentPeriodStart,
+                    currentPeriodEnd = subscription.CurrentPeriodEnd,
+                    canCancel = subscription.Status is SubscriptionStatus.Active or SubscriptionStatus.PastDue },
+            checkouts
+        });
+    }
+
     [HttpPost("api/billing/checkout")]
     [Authorize(Policy = nameof(Permission.ManageOrganization))]
     public async Task<IActionResult> Checkout(CheckoutRequest request, CancellationToken ct)

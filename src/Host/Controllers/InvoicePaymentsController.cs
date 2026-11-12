@@ -40,6 +40,63 @@ public sealed class InvoicePaymentsController(
         });
     }
 
+    [HttpGet("api/payment-accounts/paystack/banks")]
+    [Authorize(Policy = nameof(Permission.ManageOrganization))]
+    public async Task<IActionResult> Banks(CancellationToken ct)
+    {
+        if (!paystack.Enabled || string.IsNullOrWhiteSpace(paystack.SecretKey))
+            return Problem("Online payments are not configured yet.", statusCode: 503);
+
+        var organizationId = currentOrganization.OrganizationId;
+        if (organizationId is null) return BadRequest(new { error = "No active business workspace." });
+        var countryCode = await db.Organizations.AsNoTracking()
+            .Where(x => x.Id == organizationId.Value)
+            .Select(x => x.CountryCode)
+            .SingleOrDefaultAsync(ct);
+        var country = countryCode?.ToUpperInvariant() switch
+        {
+            "NG" => "nigeria",
+            "GH" => "ghana",
+            "KE" => "kenya",
+            "ZA" => "south africa",
+            _ => null
+        };
+        if (country is null)
+            return BadRequest(new { error = "Online bank setup is not available for this business country yet." });
+
+        using var client = clients.CreateClient("Paystack");
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"bank?country={Uri.EscapeDataString(country)}&perPage=100");
+        request.Headers.Authorization = new("Bearer", paystack.SecretKey);
+        try
+        {
+            using var response = await client.SendAsync(request, ct);
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            if (!response.IsSuccessStatusCode || !json.RootElement.TryGetProperty("data", out var data)
+                || data.ValueKind != JsonValueKind.Array)
+            {
+                logger.LogWarning("Paystack bank list failed with HTTP {StatusCode}.", response.StatusCode);
+                return Problem("The bank list is temporarily unavailable. Please try again.", statusCode: 502);
+            }
+
+            var banks = data.EnumerateArray()
+                .Where(bank => TryString(bank, "name", out _) && TryString(bank, "code", out _)
+                    && (!bank.TryGetProperty("active", out var active) || active.ValueKind == JsonValueKind.True)
+                    && (!bank.TryGetProperty("is_deleted", out var deleted) || deleted.ValueKind != JsonValueKind.True))
+                .Select(bank => new { name = bank.GetProperty("name").GetString()!, code = bank.GetProperty("code").GetString()! })
+                .OrderBy(bank => bank.name)
+                .ToArray();
+
+            return Ok(new { banks });
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException
+                                   || ex is TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Could not load Paystack bank list.");
+            return Problem("The bank list is temporarily unavailable. Please try again.", statusCode: 502);
+        }
+    }
+
     [HttpPost("api/payment-accounts/paystack")]
     [Authorize(Policy = nameof(Permission.ManageOrganization))]
     public async Task<IActionResult> CreateAccount(CreatePaystackAccountRequest input, CancellationToken ct)
@@ -205,10 +262,17 @@ public sealed class InvoicePaymentsController(
         if (!ValidSignature(raw, Request.Headers["Paystack-Signature"].ToString(), paystack.WebhookSecret)
             && !ValidLegacySignature(raw, Request.Headers["x-paystack-signature"].ToString(), paystack.SecretKey)) return Unauthorized();
         using var payload = JsonDocument.Parse(raw);
-        if (!payload.RootElement.TryGetProperty("event", out var eventName) || eventName.GetString() != "charge.success"
-            || !payload.RootElement.TryGetProperty("data", out var data)
-            || !TryString(data, "reference", out var reference) || !reference.StartsWith("invpay_", StringComparison.Ordinal)) return Ok();
-        await invoicePaymentWebhook.ProcessSuccessfulCharge(data, ct);
+        if (!payload.RootElement.TryGetProperty("event", out var eventName)
+            || eventName.ValueKind != JsonValueKind.String
+            || !payload.RootElement.TryGetProperty("data", out var data)) return Ok();
+        var eventValue = eventName.GetString()!;
+        if (eventValue == "charge.success")
+        {
+            if (!TryString(data, "reference", out var reference) || !reference.StartsWith("invpay_", StringComparison.Ordinal)) return Ok();
+            await invoicePaymentWebhook.ProcessSuccessfulCharge(data, ct);
+        }
+        else if (eventValue.StartsWith("refund.", StringComparison.Ordinal))
+            await invoicePaymentWebhook.ProcessRefundUpdate(data, eventValue, ct);
         return Ok();
     }
 

@@ -100,3 +100,30 @@ public sealed class GetInvoicePdfHandler(
         return new InvoicePdfFile(renderer.Render(model), InvoicePdfModelFactory.FileName(invoice));
     }
 }
+
+public sealed class GetCreditNotePdfHandler(
+    IInvoiceRepository invoices, ICustomerRepository customers, IOrganizationRepository organizations,
+    ICreditNotePdfRenderer renderer, ICurrentOrganization currentOrganization)
+{
+    public async Task<CreditNotePdfFile> Handle(Guid creditNoteId, CancellationToken cancellationToken)
+    {
+        var organization = await InvoiceLookups.OrganizationAsync(organizations, currentOrganization, cancellationToken);
+        var note = await invoices.CreditNoteByIdAsync(creditNoteId, cancellationToken)
+            ?? throw new NotFoundException("Credit note not found.");
+        var invoice = await invoices.GetByIdAsync(note.InvoiceId, cancellationToken)
+            ?? throw new NotFoundException("Invoice not found.");
+        var customer = await customers.GetByIdAsync(invoice.CustomerId, cancellationToken)
+            ?? throw new NotFoundException("Customer not found.");
+        var seller = new PdfParty(organization.Name,
+            PdfAddress.Lines(organization.AddressLine1, organization.AddressLine2, organization.City,
+                organization.Region, organization.PostalCode, organization.CountryCode),
+            organization.Email, organization.Phone, organization.TaxIdentificationNumber);
+        var buyer = new PdfParty(customer.Name,
+            PdfAddress.Lines(customer.AddressLine1, customer.AddressLine2, customer.City,
+                customer.Region, customer.PostalCode, customer.CountryCode),
+            customer.Email, customer.Phone, customer.TaxIdentificationNumber);
+        var model = new CreditNotePdfModel(seller, buyer, invoice.Number ?? "Draft invoice",
+            note.Number, note.CurrencyCode, note.Amount, note.Reason, note.IssuedOn);
+        return new CreditNotePdfFile(renderer.Render(model), $"{note.Number}.pdf");
+    }
+}

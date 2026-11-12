@@ -55,13 +55,13 @@ public sealed class GetDashboardHandler(
 
             return new MonthlyPointDto(
                 month,
-                invoicedInMonth.Sum(x => x.Gross), invoicedInMonth.Count,
+                invoicedInMonth.Sum(x => x.Gross), invoicedInMonth.Count(x => x.Gross >= 0m),
                 collectedInMonth.Sum(x => x.Amount), collectedInMonth.Count);
         }).ToList();
 
         var topCustomers = open
             .GroupBy(r => new { r.CustomerId, r.CustomerName })
-            .Select(g => new TopCustomerDto(g.Key.CustomerId, g.Key.CustomerName, g.Sum(r => r.Balance), g.Count()))
+            .Select(g => new TopCustomerDto(g.Key.CustomerId, g.Key.CustomerName, g.Sum(r => r.BaseBalance), g.Count()))
             .OrderByDescending(c => c.Outstanding)
             .Take(5)
             .ToList();
@@ -70,10 +70,10 @@ public sealed class GetDashboardHandler(
 
         return new DashboardDto(
             from, to, organization.BaseCurrencyCode,
-            sales.Sum(x => x.Gross), sales.Count, sales.Sum(x => x.Net), sales.Sum(x => x.Tax),
+            sales.Sum(x => x.Gross), sales.Count(x => x.Gross >= 0m), sales.Sum(x => x.Net), sales.Sum(x => x.Tax),
             collected.Sum(x => x.Amount), collected.Count,
-            open.Sum(r => r.Balance), open.Count,
-            overdue.Sum(r => r.Balance), overdue.Count,
+            open.Sum(r => r.BaseBalance), open.Count,
+            overdue.Sum(r => r.BaseBalance), overdue.Count,
             new StatusCountsDto(
                 CountOf(InvoiceStatus.Draft), CountOf(InvoiceStatus.Issued), CountOf(InvoiceStatus.PartiallyPaid),
                 CountOf(InvoiceStatus.Paid), CountOf(InvoiceStatus.Void)),

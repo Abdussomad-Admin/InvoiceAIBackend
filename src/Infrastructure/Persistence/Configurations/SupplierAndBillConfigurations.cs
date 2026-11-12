@@ -45,6 +45,8 @@ public class SupplierBillConfiguration : IEntityTypeConfiguration<SupplierBill>
         builder.Property(b => b.Number).IsRequired().HasMaxLength(100);
         builder.Property(b => b.NumberKey).IsRequired().HasMaxLength(100);
         builder.Property(b => b.CurrencyCode).IsRequired().HasMaxLength(3).IsFixedLength();
+        builder.Property(b => b.BaseCurrencyCode).IsRequired().HasMaxLength(3).IsFixedLength();
+        builder.Property(b => b.ExchangeRateToBase).HasPrecision(18, 8);
         builder.Property(b => b.Status).HasConversion<string>().IsRequired().HasMaxLength(30);
         builder.Property(b => b.Notes).HasMaxLength(2000);
         builder.Property(b => b.VoidReason).HasMaxLength(500);

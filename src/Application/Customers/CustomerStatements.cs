@@ -17,6 +17,7 @@ namespace Application.Customers;
 public enum CustomerStatementEntryType
 {
     Invoice,
+    CreditNote,
     Payment,
     InvoiceVoid,
     PaymentReversal
@@ -31,18 +32,20 @@ public sealed record CustomerStatementDto(
     decimal OpeningBalance, IReadOnlyList<CustomerStatementEntry> Entries, decimal ClosingBalance);
 
 public sealed record CustomerStatementInvoiceRow(
-    Guid Id, string? Number, DateOnly? IssueDate, decimal Total, string CurrencyCode, DateTimeOffset? VoidedAt);
+    Guid Id, string? Number, DateOnly? IssueDate, decimal TotalBase, string CurrencyCode, DateTimeOffset? VoidedAt);
 
 public sealed record CustomerStatementPaymentRow(
-    Guid Id, DateOnly PaidOn, decimal Amount, string CurrencyCode, PaymentMethod Method,
+    Guid Id, DateOnly PaidOn, decimal AmountBase, string CurrencyCode, PaymentMethod Method,
     string? Reference, DateTimeOffset? ReversedAt);
 
+public sealed record CustomerStatementCreditNoteRow(string Number, decimal AmountBase, DateOnly IssuedOn, string Reason);
+
 public sealed record CustomerStatementOpeningParts(
-    decimal Invoices, decimal VoidedInvoices, decimal Payments, decimal ReversedPayments);
+    decimal Invoices, decimal VoidedInvoices, decimal Payments, decimal ReversedPayments, decimal Credits);
 
 public sealed record CustomerStatementData(
     CustomerStatementOpeningParts Opening, IReadOnlyList<CustomerStatementInvoiceRow> Invoices,
-    IReadOnlyList<CustomerStatementPaymentRow> Payments);
+    IReadOnlyList<CustomerStatementPaymentRow> Payments, IReadOnlyList<CustomerStatementCreditNoteRow> CreditNotes);
 
 public interface ICustomerStatementRepository
 {
@@ -81,7 +84,7 @@ public sealed class GetCustomerStatementHandler(
 
         var opening = MoneyMath.Round(
             data.Opening.Invoices - data.Opening.VoidedInvoices
-            - data.Opening.Payments + data.Opening.ReversedPayments);
+            - data.Opening.Payments + data.Opening.ReversedPayments - data.Opening.Credits);
         var ledger = new List<(DateOnly Date, int Order, CustomerStatementEntryType Type,
             string Reference, string Description, decimal Debit, decimal Credit)>();
 
@@ -90,14 +93,14 @@ public sealed class GetCustomerStatementHandler(
             if (invoice.IssueDate is { } issueDate && issueDate >= from && issueDate <= to)
                 ledger.Add((issueDate, 10, CustomerStatementEntryType.Invoice,
                     invoice.Number ?? $"Invoice {invoice.Id.ToString("N")[..8]}", "Invoice issued",
-                    invoice.Total, 0m));
+                    invoice.TotalBase, 0m));
 
             if (invoice.VoidedAt is { } voidedAt && voidedAt >= startUtc && voidedAt < endExclusiveUtc)
             {
                 var voidDate = LocalDate(voidedAt, zone);
                 ledger.Add((voidDate, 30, CustomerStatementEntryType.InvoiceVoid,
                     invoice.Number ?? $"Invoice {invoice.Id.ToString("N")[..8]}", "Invoice voided",
-                    0m, invoice.Total));
+                    0m, invoice.TotalBase));
             }
         }
 
@@ -109,14 +112,18 @@ public sealed class GetCustomerStatementHandler(
 
             if (payment.PaidOn >= from && payment.PaidOn <= to)
                 ledger.Add((payment.PaidOn, 20, CustomerStatementEntryType.Payment,
-                    reference, $"Payment received ({payment.Method})", 0m, payment.Amount));
+                    reference, $"Payment received ({payment.Method})", 0m, payment.AmountBase));
 
             if (payment.ReversedAt is { } reversedAt && reversedAt >= startUtc && reversedAt < endExclusiveUtc)
             {
                 var reversalDate = LocalDate(reversedAt, zone);
                 ledger.Add((reversalDate, 40, CustomerStatementEntryType.PaymentReversal,
-                    reference, "Payment reversed", payment.Amount, 0m));
+                    reference, "Payment reversed", payment.AmountBase, 0m));
             }
+
+        foreach (var credit in data.CreditNotes.Where(c => c.IssuedOn >= from && c.IssuedOn <= to))
+            ledger.Add((credit.IssuedOn, 25, CustomerStatementEntryType.CreditNote,
+                credit.Number, $"Credit note issued: {credit.Reason}", 0m, credit.AmountBase));
         }
 
         var balance = opening;

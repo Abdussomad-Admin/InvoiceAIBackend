@@ -8,7 +8,7 @@ public sealed record BillLineInput(
 
 public sealed record BillInput(
     Guid SupplierId, string Number, DateOnly BillDate, DateOnly? DueDate, string? Notes,
-    IReadOnlyList<BillLineInput> Lines);
+    IReadOnlyList<BillLineInput> Lines, string? CurrencyCode = null, decimal? ExchangeRateToBase = null);
 
 public sealed record FinalizeBillCommand(bool ConfirmPossibleDuplicates);
 public sealed record VoidBillCommand(string Reason);
@@ -29,6 +29,7 @@ public sealed record PossibleDuplicateDto(
 
 public sealed record BillDto(
     Guid Id, string Number, Guid SupplierId, string SupplierName, string CurrencyCode,
+    string BaseCurrencyCode, decimal ExchangeRateToBase,
     BillStatus Status, DateOnly BillDate, DateOnly DueDate, string? Notes,
     decimal Subtotal, decimal DiscountTotal, decimal TaxTotal, decimal Total,
     decimal AmountPaid, decimal Balance, bool IsOverdue, int DaysOverdue, string? VoidReason,
@@ -36,6 +37,7 @@ public sealed record BillDto(
 
 public sealed record BillSummaryDto(
     Guid Id, string Number, Guid SupplierId, string SupplierName, string CurrencyCode,
+    string BaseCurrencyCode, decimal ExchangeRateToBase,
     BillStatus Status, DateOnly BillDate, DateOnly DueDate,
     decimal Total, decimal AmountPaid, decimal Balance, bool IsOverdue);
 

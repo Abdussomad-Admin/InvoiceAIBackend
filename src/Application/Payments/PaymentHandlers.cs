@@ -12,7 +12,7 @@ namespace Application.Payments;
 internal static class PaymentMapping
 {
     public static PaymentDto ToDto(this Payment p, string? invoiceNumber, string customerName) => new(
-        p.Id, p.InvoiceId, invoiceNumber, p.CustomerId, customerName, p.Amount, p.CurrencyCode,
+        p.Id, p.InvoiceId, invoiceNumber, p.CustomerId, customerName, p.Amount, p.CurrencyCode, p.ExchangeRateToBase,
         p.PaidOn, p.Method, p.Reference, p.Notes, p.RecordedByUserId, p.CreatedAt,
         p.IsReversed, p.ReversedAt, p.ReversalReason);
 }
@@ -52,9 +52,13 @@ public sealed class RecordPaymentHandler(
 
             invoice.ApplyPayment(command.Amount);
 
+            var exchangeRate = invoice.CurrencyCode == invoice.BaseCurrencyCode
+                ? 1m
+                : command.ExchangeRateToBase ?? throw new DomainException(
+                    $"Enter the {invoice.CurrencyCode} to {invoice.BaseCurrencyCode} exchange rate for this payment.");
             payment = Payment.Create(
                 organization.Id, invoice.Id, invoice.CustomerId, invoice.CurrencyCode, command.Amount,
-                paidOn, command.Method, reference, command.Notes, actorId);
+                paidOn, command.Method, reference, command.Notes, actorId, exchangeRate);
             payments.Add(payment);
 
             await unitOfWork.SaveChangesAsync(cancellationToken);

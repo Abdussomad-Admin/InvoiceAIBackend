@@ -1,4 +1,5 @@
-﻿using Application.Common.Exceptions;
+using Application.Common;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Invoices;
 using Domain.Common;
@@ -113,7 +114,8 @@ public class SendInvoiceTests
         await using var ctx = TestDatabase.CreateContext(Clock, seed.OrganizationId, seed.UserId);
         var handler = new SendInvoiceHandler(
             new InvoiceRepository(ctx), new CustomerRepository(ctx), new OrganizationRepository(ctx),
-            new CapturingPdfRenderer(), sender, ctx, new TestCurrentOrganization(seed.OrganizationId), Clock);
+            new CapturingPdfRenderer(), sender, ctx, new TestCurrentOrganization(seed.OrganizationId),
+            new AppLinkSettings("https://invoice-ai.example"), Clock);
         return await handler.Handle(invoiceId, new SendInvoiceCommand(message), CancellationToken.None);
     }
 

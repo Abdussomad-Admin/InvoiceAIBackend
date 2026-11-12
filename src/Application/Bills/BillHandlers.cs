@@ -49,7 +49,8 @@ internal static class BillMapping
 {
     public static BillDto ToDto(
         this SupplierBill b, string supplierName, DateOnly today, IReadOnlyList<PossibleDuplicateDto> duplicates) => new(
-        b.Id, b.Number, b.SupplierId, supplierName, b.CurrencyCode, b.Status, b.BillDate, b.DueDate, b.Notes,
+        b.Id, b.Number, b.SupplierId, supplierName, b.CurrencyCode, b.BaseCurrencyCode, b.ExchangeRateToBase,
+        b.Status, b.BillDate, b.DueDate, b.Notes,
         b.Subtotal, b.DiscountTotal, b.TaxTotal, b.Total, b.AmountPaid, b.Balance,
         b.IsOverdue(today), b.DaysOverdue(today), b.VoidReason,
         b.Lines.OrderBy(l => l.Position).Select(l => new BillLineDto(
@@ -70,12 +71,16 @@ public sealed class CreateBillHandler(
 
         BillLookups.EnsureNotInFuture(input.BillDate, today);
         var dueDate = input.DueDate ?? input.BillDate.AddDays(supplier.DefaultPaymentTermsDays);
+        var currencyCode = (input.CurrencyCode ?? organization.BaseCurrencyCode).Trim().ToUpperInvariant();
+        if (currencyCode != organization.BaseCurrencyCode && input.ExchangeRateToBase is null)
+            throw new DomainException($"Enter the {currencyCode} to {organization.BaseCurrencyCode} exchange rate for this bill.");
 
         await BillLookups.EnsureNumberFreeAsync(bills, supplier.Id, input.Number, Guid.Empty, cancellationToken);
 
         var bill = SupplierBill.CreateDraft(
-            organization.Id, supplier.Id, organization.BaseCurrencyCode,
-            input.Number, input.BillDate, dueDate, input.Notes);
+            organization.Id, supplier.Id, currencyCode,
+            input.Number, input.BillDate, dueDate, input.Notes,
+            organization.BaseCurrencyCode, input.ExchangeRateToBase ?? 1m);
         bill.ReplaceLines(BillLookups.ToLineInputs(input));
 
         bills.Add(bill);
@@ -103,7 +108,13 @@ public sealed class UpdateBillHandler(
         var dueDate = input.DueDate ?? input.BillDate.AddDays(supplier.DefaultPaymentTermsDays);
 
         // The entity refuses first if the bill is no longer a draft.
-        bill.UpdateDetails(supplier.Id, input.Number, input.BillDate, dueDate, input.Notes);
+        var currencyCode = (input.CurrencyCode ?? bill.CurrencyCode).Trim().ToUpperInvariant();
+        var exchangeRateToBase = input.ExchangeRateToBase ??
+            (currencyCode == bill.CurrencyCode ? bill.ExchangeRateToBase : null);
+        if (currencyCode != bill.BaseCurrencyCode && exchangeRateToBase is null)
+            throw new DomainException($"Enter the {currencyCode} to {bill.BaseCurrencyCode} exchange rate for this bill.");
+        bill.UpdateDetails(supplier.Id, input.Number, input.BillDate, dueDate, input.Notes,
+            currencyCode, exchangeRateToBase ?? 1m);
         await BillLookups.EnsureNumberFreeAsync(bills, supplier.Id, input.Number, bill.Id, cancellationToken);
         bill.ReplaceLines(BillLookups.ToLineInputs(input));
 
