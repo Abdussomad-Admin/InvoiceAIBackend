@@ -35,8 +35,8 @@ public sealed class InvoicePaymentsController(
         var account = await db.OrganizationPaystackAccounts.AsNoTracking().SingleOrDefaultAsync(ct);
         return account is null ? Ok(new { status = "Not set up" }) : Ok(new
         {
-            status = account.IsActive && account.IsVerified ? "Ready" : "Pending verification",
-            account.CurrencyCode, account.IsActive, account.IsVerified, account.LastCheckedAt
+            status = CanCollect(account) ? TestMode && !account.IsVerified ? "Test mode ready" : "Ready" : "Pending verification",
+            account.CurrencyCode, account.IsActive, account.IsVerified, isTestMode = TestMode, account.LastCheckedAt
         });
     }
 
@@ -87,7 +87,7 @@ public sealed class InvoicePaymentsController(
                 clock.GetUtcNow());
             db.OrganizationPaystackAccounts.Add(account);
             await db.SaveChangesAsync(ct);
-            return Ok(new { status = account.IsActive && account.IsVerified ? "Ready" : "Pending verification", account.CurrencyCode });
+            return Ok(new { status = CanCollect(account) ? TestMode && !account.IsVerified ? "Test mode ready" : "Ready" : "Pending verification", account.CurrencyCode, account.IsActive, account.IsVerified, isTestMode = TestMode });
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException
                                    || ex is TaskCanceledException && !ct.IsCancellationRequested)
@@ -116,7 +116,7 @@ public sealed class InvoicePaymentsController(
         var verified = data.TryGetProperty("is_verified", out var v) && v.ValueKind == JsonValueKind.True;
         account.RefreshProviderStatus(active && string.Equals(currency, account.CurrencyCode, StringComparison.OrdinalIgnoreCase), verified, clock.GetUtcNow());
         await db.SaveChangesAsync(ct);
-        return Ok(new { status = account.IsActive && account.IsVerified ? "Ready" : "Pending verification", account.CurrencyCode, account.IsActive, account.IsVerified, account.LastCheckedAt });
+        return Ok(new { status = CanCollect(account) ? TestMode && !account.IsVerified ? "Test mode ready" : "Ready" : "Pending verification", account.CurrencyCode, account.IsActive, account.IsVerified, isTestMode = TestMode, account.LastCheckedAt });
     }
 
     [HttpGet("api/public/invoices/{token}")]
@@ -144,7 +144,7 @@ public sealed class InvoicePaymentsController(
         if (invoice is null || invoice.Status is not (InvoiceStatus.Issued or InvoiceStatus.PartiallyPaid) || invoice.Balance <= 0) return NotFound();
         var account = await db.OrganizationPaystackAccounts.IgnoreQueryFilters()
             .SingleOrDefaultAsync(a => a.OrganizationId == invoice.OrganizationId, ct);
-        if (account is null || !account.IsActive || !account.IsVerified || account.CurrencyCode != invoice.CurrencyCode)
+        if (account is null || !CanCollect(account) || account.CurrencyCode != invoice.CurrencyCode)
             return Conflict(new { error = "This business is still completing payment account verification." });
         var customer = await db.Customers.IgnoreQueryFilters().AsNoTracking()
             .SingleOrDefaultAsync(c => c.Id == invoice.CustomerId && c.OrganizationId == invoice.OrganizationId, ct);
@@ -227,6 +227,9 @@ public sealed class InvoicePaymentsController(
         var expected = HMACSHA512.HashData(Encoding.UTF8.GetBytes(secret), Encoding.UTF8.GetBytes($"{timestamp}.{raw}"));
         return signatures.Any(s => CryptographicOperations.FixedTimeEquals(expected, Convert.FromHexString(s)));
     }
+
+    private bool TestMode => paystack.SecretKey.StartsWith("sk_test_", StringComparison.Ordinal);
+    private bool CanCollect(OrganizationPaystackAccount account) => account.IsActive && (account.IsVerified || TestMode);
 
     private static bool ValidLegacySignature(string raw, string signature, string secret)
     {
