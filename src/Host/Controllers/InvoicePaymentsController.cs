@@ -191,6 +191,36 @@ public sealed class InvoicePaymentsController(
             status = invoice.Status.ToString(), canPay = invoice.Balance > 0 && invoice.Status is InvoiceStatus.Issued or InvoiceStatus.PartiallyPaid });
     }
 
+    [HttpPost("api/public/invoices/{token}/confirm")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> ConfirmPublicInvoicePayment(string token, [FromQuery] string reference, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(reference) || reference.Length > 100) return BadRequest();
+        var invoice = await db.Invoices.IgnoreQueryFilters().AsNoTracking()
+            .SingleOrDefaultAsync(i => i.PublicPaymentToken == token, ct);
+        if (invoice is null || invoice.Status is InvoiceStatus.Draft or InvoiceStatus.Void) return NotFound();
+        var checkoutExists = await db.InvoicePaymentCheckouts.IgnoreQueryFilters().AsNoTracking()
+            .AnyAsync(c => c.Reference == reference && c.InvoiceId == invoice.Id
+                           && c.OrganizationId == invoice.OrganizationId, ct);
+        if (!checkoutExists) return NotFound();
+
+        // The browser return is not proof of payment. Ask Paystack to verify this exact checkout
+        // server-side so the invoice can update even when its webhook arrives late or is misconfigured.
+        await invoicePaymentWebhook.ProcessSuccessfulReference(reference, ct);
+
+        invoice = await db.Invoices.IgnoreQueryFilters().AsNoTracking()
+            .SingleOrDefaultAsync(i => i.Id == invoice.Id && i.OrganizationId == invoice.OrganizationId, ct);
+        if (invoice is null) return NotFound();
+        return Ok(new { invoice.Number, businessName = (await db.Organizations.AsNoTracking()
+                .Where(x => x.Id == invoice.OrganizationId).Select(x => x.Name).SingleAsync(ct)),
+            customerName = await db.Customers.IgnoreQueryFilters().AsNoTracking()
+                .Where(x => x.Id == invoice.CustomerId && x.OrganizationId == invoice.OrganizationId)
+                .Select(x => x.Name).SingleAsync(ct),
+            invoice.CurrencyCode, invoice.Total, invoice.AmountPaid, invoice.Balance, invoice.DueDate,
+            status = invoice.Status.ToString(), canPay = invoice.Balance > 0 && invoice.Status is InvoiceStatus.Issued or InvoiceStatus.PartiallyPaid });
+    }
+
     [HttpPost("api/public/invoices/{token}/checkout")]
     [AllowAnonymous]
     [EnableRateLimiting("auth")]

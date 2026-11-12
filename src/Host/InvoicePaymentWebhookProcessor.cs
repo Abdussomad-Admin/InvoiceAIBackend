@@ -14,6 +14,12 @@ public sealed class InvoicePaymentWebhookProcessor(
     public async Task ProcessSuccessfulCharge(JsonElement data, CancellationToken ct)
     {
         if (!TryString(data, "reference", out var reference) || !reference.StartsWith("invpay_", StringComparison.Ordinal)) return;
+        await ProcessSuccessfulReference(reference, ct);
+    }
+
+    public async Task ProcessSuccessfulReference(string reference, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(reference) || !reference.StartsWith("invpay_", StringComparison.Ordinal)) return;
         var checkout = await db.InvoicePaymentCheckouts.IgnoreQueryFilters().SingleOrDefaultAsync(c => c.Reference == reference, ct);
         if (checkout is null || checkout.Status == InvoicePaymentCheckoutStatus.Succeeded) return;
         using var client = clients.CreateClient("Paystack");
@@ -27,12 +33,14 @@ public sealed class InvoicePaymentWebhookProcessor(
             || !TryString(verified, "reference", out var verifiedReference) || verifiedReference != reference
             || !TryLong(verified, "amount", out var amount) || amount != checkout.AmountMinor
             || !TryString(verified, "currency", out var currency)
-            || !string.Equals(currency, checkout.CurrencyCode, StringComparison.OrdinalIgnoreCase)
-            || !TryString(verified, "subaccount_code", out var subaccountCode)) return;
+            || !string.Equals(currency, checkout.CurrencyCode, StringComparison.OrdinalIgnoreCase)) return;
+        var hasSubaccountCode = TryString(verified, "subaccount_code", out var subaccountCode)
+                                || TryNestedString(verified, "subaccount", "subaccount_code", out subaccountCode);
         var account = await db.OrganizationPaystackAccounts.IgnoreQueryFilters()
             .SingleOrDefaultAsync(a => a.OrganizationId == checkout.OrganizationId, ct);
         var testMode = paystack.SecretKey.StartsWith("sk_test_", StringComparison.Ordinal);
-        if (account is null || !account.IsActive || (!account.IsVerified && !testMode) || account.SubaccountCode != subaccountCode) return;
+        if (account is null || !account.IsActive || (!account.IsVerified && !testMode)
+            || (hasSubaccountCode && account.SubaccountCode != subaccountCode)) return;
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         checkout = await db.InvoicePaymentCheckouts.IgnoreQueryFilters().SingleAsync(c => c.Id == checkout.Id, ct);
@@ -81,6 +89,13 @@ public sealed class InvoicePaymentWebhookProcessor(
         result = "";
         return value.ValueKind == JsonValueKind.Object && value.TryGetProperty(key, out var element)
                && element.ValueKind == JsonValueKind.String && (result = element.GetString() ?? "").Length > 0;
+    }
+
+    private static bool TryNestedString(JsonElement value, string parentKey, string key, out string result)
+    {
+        result = "";
+        return value.ValueKind == JsonValueKind.Object && value.TryGetProperty(parentKey, out var parent)
+               && TryString(parent, key, out result);
     }
 
     private static bool TryLong(JsonElement value, string key, out long result)
