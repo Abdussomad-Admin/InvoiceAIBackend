@@ -68,12 +68,25 @@ builder.Services.AddInfrastructure(connectionString, jwt, emailSettings);
 
 builder.Services.AddOpenApi(options => options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
 
-builder.Services.AddSingleton(new AppLinkSettings(
-    builder.Configuration["App:FrontendBaseUrl"] ?? "http://localhost:5173"));
-
 // CORS: only the origins listed in configuration may call the API from a browser.
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
                      ?? Array.Empty<string>();
+var configuredFrontendUrl = builder.Configuration["App:FrontendBaseUrl"];
+var publicFrontendOrigin = allowedOrigins.FirstOrDefault(origin =>
+    Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+    && uri.Scheme == Uri.UriSchemeHttps
+    && !uri.IsLoopback);
+var configuredFrontendIsAllowed = Uri.TryCreate(configuredFrontendUrl, UriKind.Absolute, out var configuredFrontendUri)
+    && allowedOrigins.Any(origin => Uri.TryCreate(origin, UriKind.Absolute, out var allowedUri)
+        && string.Equals(allowedUri.Host, configuredFrontendUri.Host, StringComparison.OrdinalIgnoreCase));
+
+// Email and checkout return links must point to the SPA host. If the configured URL
+// is stale (for example, set to the API host), use the public origin already allowed by CORS.
+var frontendBaseUrl = !string.IsNullOrWhiteSpace(publicFrontendOrigin) && !configuredFrontendIsAllowed
+    ? publicFrontendOrigin
+    : configuredFrontendUrl ?? "http://localhost:5173";
+builder.Services.AddSingleton(new AppLinkSettings(frontendBaseUrl));
+
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
 {
     if (allowedOrigins.Length > 0)
@@ -107,7 +120,9 @@ builder.Services.AddRateLimiter(options =>
 
 // Register every class ending in "Handler" from the Application project.
 foreach (var type in typeof(Application.Auth.RegisterHandler).Assembly.GetTypes()
-             .Where(t => t is { IsClass: true, IsAbstract: false } && t.Name.EndsWith("Handler")))
+             .Where(t => t is { IsClass: true, IsAbstract: false }
+                 && (t.Name.EndsWith("Handler", StringComparison.Ordinal)
+                     || t.Name.EndsWith("Handlers", StringComparison.Ordinal))))
 {
     builder.Services.AddScoped(type);
 }

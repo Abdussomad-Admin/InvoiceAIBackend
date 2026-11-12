@@ -233,7 +233,7 @@ public sealed class InvoicePaymentsController(
             currency = invoice.CurrencyCode,
             reference,
             subaccount = account.SubaccountCode,
-            callback_url = $"{links.FrontendBaseUrl.TrimEnd('/')}/pay/{Uri.EscapeDataString(token)}",
+            callback_url = $"{links.FrontendBaseUrl.TrimEnd('/')}/?pay={Uri.EscapeDataString(token)}",
             metadata = new { purpose = "invoice_payment", invoiceId = invoice.Id, organizationId = invoice.OrganizationId }
         });
         using var response = await client.SendAsync(request, ct);
