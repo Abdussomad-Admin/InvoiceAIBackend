@@ -7,6 +7,8 @@ public sealed class Organization : BaseEntity
     private Organization() { }
 
     public string Name { get; private set; } = null!;
+    public BusinessAccountType AccountType { get; private set; } = BusinessAccountType.Organization;
+    public bool IsOnboardingComplete { get; private set; }
     public string CountryCode { get; private set; } = null!;
     public string BaseCurrencyCode { get; private set; } = null!;
     public string TimeZoneId { get; private set; } = null!;
@@ -24,11 +26,13 @@ public sealed class Organization : BaseEntity
     public bool IsArchived { get; private set; }
 
     public static Organization Create(
-        string name, string countryCode, string baseCurrencyCode, string timeZoneId)
+        string name, string countryCode, string baseCurrencyCode, string timeZoneId,
+        BusinessAccountType accountType = BusinessAccountType.Organization)
     {
         return new Organization
         {
             Name = Guard.NotBlank(name, nameof(Name), 200),
+            AccountType = accountType,
             CountryCode = Guard.IsoCode(countryCode, 2, nameof(CountryCode)),
             BaseCurrencyCode = Guard.IsoCode(baseCurrencyCode, 3, nameof(BaseCurrencyCode)),
             TimeZoneId = Guard.TimeZone(timeZoneId, nameof(TimeZoneId))
@@ -57,6 +61,8 @@ public sealed class Organization : BaseEntity
 
         DefaultPaymentTermsDays = days;
     }
+
+    public void CompleteOnboarding() => IsOnboardingComplete = true;
 
     private static string? ValidEmail(string? email)
     {

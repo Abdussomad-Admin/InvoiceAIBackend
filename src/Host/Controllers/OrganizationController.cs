@@ -9,7 +9,8 @@ namespace Host.Controllers;
 [Route("api/organization")]
 public class OrganizationController(
     GetOrganizationHandler get,
-    UpdateOrganizationHandler update) : ControllerBase
+    UpdateOrganizationHandler update,
+    CompleteOrganizationOnboardingHandler completeOnboarding) : ControllerBase
 {
     [HttpGet]
     [Authorize(Policy = nameof(Permission.ViewData))]
@@ -20,4 +21,12 @@ public class OrganizationController(
     [Authorize(Policy = nameof(Permission.ManageOrganization))]
     public async Task<ActionResult<OrganizationDto>> Update(UpdateOrganizationInput input, CancellationToken ct)
         => Ok(await update.Handle(input, ct));
+
+    [HttpPost("onboarding-complete")]
+    [Authorize(Policy = nameof(Permission.ManageOrganization))]
+    public async Task<IActionResult> CompleteOnboarding(CancellationToken ct)
+    {
+        await completeOnboarding.Handle(ct);
+        return NoContent();
+    }
 }

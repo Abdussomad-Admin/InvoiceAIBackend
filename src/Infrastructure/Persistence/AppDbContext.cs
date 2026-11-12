@@ -45,6 +45,8 @@ public class AppDbContext(
     public DbSet<BankStatementLine> BankStatementLines => Set<BankStatementLine>();
     public DbSet<OrganizationSubscription> OrganizationSubscriptions => Set<OrganizationSubscription>();
     public DbSet<BillingCheckout> BillingCheckouts => Set<BillingCheckout>();
+    public DbSet<OrganizationPaystackAccount> OrganizationPaystackAccounts => Set<OrganizationPaystackAccount>();
+    public DbSet<InvoicePaymentCheckout> InvoicePaymentCheckouts => Set<InvoicePaymentCheckout>();
 
     private Guid? CurrentOrganizationId => currentOrganization.OrganizationId;
     private bool _allowCrossTenantWrites;

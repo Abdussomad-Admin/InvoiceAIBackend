@@ -1,8 +1,11 @@
-﻿namespace Application.Auth
+using Domain.Organizations;
+
+namespace Application.Auth
 {
     public sealed record RegisterCommand(
         string Email, string Password, string FullName, string OrganizationName,
-        string CountryCode = "NG", string CurrencyCode = "NGN", string TimeZoneId = "Africa/Lagos");
+        string CountryCode = "NG", string CurrencyCode = "NGN", string TimeZoneId = "Africa/Lagos",
+        BusinessAccountType AccountType = BusinessAccountType.Organization);
 
     public sealed record RegisterResult(Guid UserId, Guid OrganizationId);
 

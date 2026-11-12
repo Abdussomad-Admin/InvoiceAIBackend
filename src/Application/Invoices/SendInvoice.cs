@@ -8,6 +8,8 @@ using Domain.Customers;
 using Domain.Invoices;
 using Domain.Organizations;
 
+using Application.Common;
+
 namespace Application.Invoices;
 
 public sealed record SendInvoiceCommand(string? Message);
@@ -17,7 +19,7 @@ public sealed record SendInvoiceResult(string SentTo, DateTimeOffset SentAt, int
 public sealed class SendInvoiceHandler(
     IInvoiceRepository invoices, ICustomerRepository customers, IOrganizationRepository organizations,
     IInvoicePdfRenderer renderer, IEmailSender emailSender, IUnitOfWork unitOfWork,
-    ICurrentOrganization currentOrganization, TimeProvider clock)
+    ICurrentOrganization currentOrganization, AppLinkSettings links, TimeProvider clock)
 {
     private const int MaxMessageLength = 1000;
 
@@ -47,7 +49,8 @@ public sealed class SendInvoiceHandler(
         var email = new OutgoingEmail(
             customer.Email,
             OneLine($"Invoice {invoice.Number} from {organization.Name}"),
-            Body(organization, customer, invoice, message),
+            Body(organization, customer, invoice, message,
+                $"{links.FrontendBaseUrl.TrimEnd('/')}/pay/{invoice.EnsurePublicPaymentToken()}"),
             [new EmailAttachment(InvoicePdfModelFactory.FileName(invoice), "application/pdf", pdf)],
             organization.Email);
 
@@ -66,7 +69,7 @@ public sealed class SendInvoiceHandler(
 
     private static string Money(decimal amount) => amount.ToString("N2", CultureInfo.InvariantCulture);
 
-    private static string Body(Organization organization, Customer customer, Invoice invoice, string? message)
+    private static string Body(Organization organization, Customer customer, Invoice invoice, string? message, string paymentUrl)
     {
         var currency = invoice.CurrencyCode;
         var lines = new List<string> { $"Hello {customer.Name}.", "" };
@@ -81,6 +84,11 @@ public sealed class SendInvoiceHandler(
         lines.Add($"Total: {currency} {Money(invoice.Total)}");
         if (invoice.AmountPaid > 0) lines.Add($"Paid so far: {currency} {Money(invoice.AmountPaid)}");
         lines.Add($"Balance due: {currency} {Money(invoice.Balance)}");
+        if (invoice.Balance > 0)
+        {
+            lines.Add("");
+            lines.Add($"Pay securely online: {paymentUrl}");
+        }
         if (invoice.DueDate is { } due)
             lines.Add($"Due date: {due.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)}");
 

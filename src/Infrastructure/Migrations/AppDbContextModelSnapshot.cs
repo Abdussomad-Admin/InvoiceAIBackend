@@ -235,6 +235,103 @@ namespace Infrastructure.Migrations
                     b.ToTable("BillingCheckouts");
                 });
 
+            modelBuilder.Entity("Domain.Billing.InvoicePaymentCheckout", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("AmountMinor")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("AuthorizationUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.HasIndex("Reference")
+                        .IsUnique();
+
+                    b.HasIndex("OrganizationId", "InvoiceId");
+
+                    b.ToTable("InvoicePaymentCheckouts", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Billing.OrganizationPaystackAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SubaccountCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId")
+                        .IsUnique();
+
+                    b.HasIndex("SubaccountCode")
+                        .IsUnique();
+
+                    b.ToTable("OrganizationPaystackAccounts", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Billing.OrganizationSubscription", b =>
                 {
                     b.Property<Guid>("Id")
@@ -899,6 +996,10 @@ namespace Infrastructure.Migrations
                     b.Property<int>("PaymentTermsDays")
                         .HasColumnType("integer");
 
+                    b.Property<string>("PublicPaymentToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<int>("SentCount")
                         .HasColumnType("integer");
 
@@ -932,6 +1033,9 @@ namespace Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("PublicPaymentToken")
+                        .IsUnique();
 
                     b.HasIndex("OrganizationId", "DueDate");
 
@@ -1100,6 +1204,11 @@ namespace Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AccountType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<string>("AddressLine1")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -1136,6 +1245,11 @@ namespace Infrastructure.Migrations
 
                     b.Property<bool>("IsArchived")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsOnboardingComplete")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("LogoStorageKey")
                         .HasMaxLength(500)
@@ -1497,6 +1611,30 @@ namespace Infrastructure.Migrations
                         .WithMany("Lines")
                         .HasForeignKey("StatementBatchId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Domain.Billing.InvoicePaymentCheckout", b =>
+                {
+                    b.HasOne("Domain.Invoices.Invoice", null)
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Domain.Billing.OrganizationPaystackAccount", b =>
+                {
+                    b.HasOne("Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

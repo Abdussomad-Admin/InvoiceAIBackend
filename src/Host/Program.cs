@@ -41,6 +41,7 @@ var billingSettings = builder.Configuration.GetSection("Billing").Get<BillingSet
 var paystackSettings = builder.Configuration.GetSection("Paystack").Get<PaystackSettings>() ?? new PaystackSettings();
 builder.Services.AddSingleton(billingSettings);
 builder.Services.AddSingleton(paystackSettings);
+builder.Services.AddScoped<InvoicePaymentWebhookProcessor>();
 builder.Services.AddScoped<IPlanLimitChecker, BillingPlanLimitChecker>();
 builder.Services.AddHttpClient("Paystack", client =>
 {

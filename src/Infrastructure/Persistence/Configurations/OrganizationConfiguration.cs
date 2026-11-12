@@ -14,6 +14,8 @@ public class OrganizationConfiguration : IEntityTypeConfiguration<Organization>
         builder.Property(o => o.Id).ValueGeneratedNever();
 
         builder.Property(o => o.Name).IsRequired().HasMaxLength(200);
+        builder.Property(o => o.AccountType).IsRequired().HasDefaultValue(BusinessAccountType.Organization).HasSentinel(BusinessAccountType.Organization);
+        builder.Property(o => o.IsOnboardingComplete).IsRequired().HasDefaultValue(true).HasSentinel(true);
         builder.Property(o => o.CountryCode).IsRequired().HasMaxLength(2).IsFixedLength();
         builder.Property(o => o.BaseCurrencyCode).IsRequired().HasMaxLength(3).IsFixedLength();
         builder.Property(o => o.TimeZoneId).IsRequired().HasMaxLength(100);

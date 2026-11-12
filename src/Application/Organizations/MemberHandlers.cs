@@ -37,6 +37,11 @@ public sealed class InviteMemberHandler(
         if (!MemberRules.CanAssign(actor.Role, command.Role))
             throw new ForbiddenException("You are not allowed to grant that role.");
 
+        var organization = await organizations.GetByIdAsync(organizationId, cancellationToken)
+            ?? throw new NotFoundException("Organization not found.");
+        if (organization.AccountType == BusinessAccountType.Freelancer)
+            throw new DomainException("Freelancer workspaces are for individual use and cannot invite teammates.");
+
         var email = User.NormalizeEmail(command.Email);
 
         var existingUser = await users.GetByEmailAsync(email, cancellationToken);
@@ -55,8 +60,6 @@ public sealed class InviteMemberHandler(
         foreach (var old in await invitations.GetPendingByEmailAsync(email, now, cancellationToken))
             old.Revoke(now);
 
-        var organization = await organizations.GetByIdAsync(organizationId, cancellationToken)
-            ?? throw new NotFoundException("Organization not found.");
         var inviter = await users.GetByIdAsync(actorId, cancellationToken);
 
         var rawToken = secure.Generate();

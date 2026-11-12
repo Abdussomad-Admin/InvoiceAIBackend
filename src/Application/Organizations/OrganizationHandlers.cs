@@ -6,7 +6,7 @@ using Domain.Organizations;
 namespace Application.Organizations;
 
 public sealed record OrganizationDto(
-    Guid Id, string Name, string CountryCode, string BaseCurrencyCode, string TimeZoneId,
+    Guid Id, string Name, BusinessAccountType AccountType, bool IsOnboardingComplete, string CountryCode, string BaseCurrencyCode, string TimeZoneId,
     string? Email, string? Phone, string? TaxIdentificationNumber,
     string? AddressLine1, string? AddressLine2, string? City, string? Region, string? PostalCode,
     int DefaultPaymentTermsDays);
@@ -19,10 +19,22 @@ public sealed record UpdateOrganizationInput(
 internal static class OrganizationMapping
 {
     public static OrganizationDto ToDto(this Organization o) => new(
-        o.Id, o.Name, o.CountryCode, o.BaseCurrencyCode, o.TimeZoneId,
+        o.Id, o.Name, o.AccountType, o.IsOnboardingComplete, o.CountryCode, o.BaseCurrencyCode, o.TimeZoneId,
         o.Email, o.Phone, o.TaxIdentificationNumber,
         o.AddressLine1, o.AddressLine2, o.City, o.Region, o.PostalCode,
         o.DefaultPaymentTermsDays);
+}
+
+public sealed class CompleteOrganizationOnboardingHandler(
+    IOrganizationRepository organizations, IUnitOfWork unitOfWork, ICurrentOrganization currentOrganization)
+{
+    public async Task Handle(CancellationToken cancellationToken)
+    {
+        var organization = await organizations.GetByIdAsync(currentOrganization.RequireId(), cancellationToken)
+            ?? throw new NotFoundException("Organization not found.");
+        organization.CompleteOnboarding();
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
 }
 
 public sealed class GetOrganizationHandler(

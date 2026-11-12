@@ -1,5 +1,7 @@
 ﻿using Domain.Common;
 
+using System.Security.Cryptography;
+
 namespace Domain.Invoices;
 
 public sealed class Invoice : BaseEntity, ITenantOwned
@@ -32,9 +34,13 @@ public sealed class Invoice : BaseEntity, ITenantOwned
     public DateTimeOffset? LastSentAt { get; private set; }
     public string? LastSentTo { get; private set; }
     public int SentCount { get; private set; }
+    public string? PublicPaymentToken { get; private set; }
 
     public IReadOnlyList<InvoiceLine> Lines => _lines;
     public decimal Balance => Total - AmountPaid;
+
+    public string EnsurePublicPaymentToken()
+        => PublicPaymentToken ??= Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
 
     public static Invoice CreateDraft(
         Guid organizationId, Guid customerId, string currencyCode, int paymentTermsDays, string? notes)
@@ -93,6 +99,7 @@ public sealed class Invoice : BaseEntity, ITenantOwned
             throw new DomainException("The due date cannot be before the issue date.");
 
         Number = Guard.NotBlank(number, nameof(Number), 50);
+        EnsurePublicPaymentToken();
         IssueDate = issueDate;
         DueDate = due;
         Status = InvoiceStatus.Issued;
@@ -144,6 +151,7 @@ public sealed class Invoice : BaseEntity, ITenantOwned
     public void MarkSent(string recipient, DateTimeOffset now)
     {
         EnsureSendable();
+        EnsurePublicPaymentToken();
         LastSentTo = Guard.NotBlank(recipient, nameof(LastSentTo), 254);
         LastSentAt = now;
         SentCount++;

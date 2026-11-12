@@ -45,7 +45,8 @@ public sealed class RegisterHandler(
 
         var user = User.Register(email, passwordHasher.Hash(command.Password), command.FullName);
         var organization = Organization.Create(
-            command.OrganizationName, command.CountryCode, command.CurrencyCode, command.TimeZoneId);
+            command.OrganizationName, command.CountryCode, command.CurrencyCode, command.TimeZoneId,
+            command.AccountType);
         var membership = Membership.Create(user.Id, organization.Id, OrganizationRole.Owner);
 
         users.Add(user);

@@ -21,6 +21,7 @@ public sealed class BillingController(
     BillingSettings billing,
     PaystackSettings paystack,
     TimeProvider clock,
+    InvoicePaymentWebhookProcessor invoicePaymentWebhook,
     ILogger<BillingController> logger) : ControllerBase
 {
     [HttpGet("api/billing/plans")]
@@ -168,7 +169,13 @@ public sealed class BillingController(
             if (!root.TryGetProperty("data", out var data) || eventName is null) return Ok();
             var now = clock.GetUtcNow();
             if (eventName == "charge.success")
-                await ProcessSuccessfulCharge(data, now, ct);
+            {
+                if (TryString(data, "reference", out var reference)
+                    && reference.StartsWith("invpay_", StringComparison.Ordinal))
+                    await invoicePaymentWebhook.ProcessSuccessfulCharge(data, ct);
+                else
+                    await ProcessSuccessfulCharge(data, now, ct);
+            }
             else if (eventName is "invoice.payment_failed" or "invoice.update")
                 await ProcessInvoiceEvent(eventName, data, now, ct);
             else if (eventName is "subscription.not_renew" or "subscription.disable" or "subscription.create")

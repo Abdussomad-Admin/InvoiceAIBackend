@@ -27,4 +27,5 @@ public sealed class PaystackSettings
     public string SecretKey { get; set; } = "";
     public string WebhookSecret { get; set; } = "";
     public string CallbackUrl { get; set; } = "";
+    public decimal PlatformPercentageCharge { get; set; }
 }
