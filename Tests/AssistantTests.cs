@@ -52,6 +52,7 @@ internal static class AssistantKit
             new ExpenseReportTool(new Application.Reports.GetExpenseReportHandler(payables, organizations, org, clock)),
             new ReceivablesAgingTool(new Application.Reports.GetAgingHandler(receivables, organizations, org, clock)),
             new PayablesAgingTool(new Application.Reports.GetPayablesAgingHandler(payables, organizations, org, clock)),
+            new CashFlowForecastTool(new Application.Reports.GetCashFlowForecastHandler(receivables, payables, organizations, org, clock)),
             new OverdueInvoicesTool(new Application.Invoices.ListInvoicesHandler(new InvoiceRepository(ctx), organizations, org, clock)),
             new BillsDueTool(new Application.Bills.ListBillsHandler(new BillRepository(ctx), organizations, org, clock), organizations, org, clock)
         ];
@@ -112,10 +113,13 @@ public class AssistantTests
 
         // The model was given the real figures, and told the rules and today's date.
         Assert.Equal(2, model.Conversations.Count);
-        Assert.Equal(7, model.Conversations[0].Tools.Count);
+        Assert.Equal(8, model.Conversations[0].Tools.Count);
         Assert.Contains("2026-01-15", model.Conversations[0].SystemPrompt);
         Assert.Contains("NGN", model.Conversations[0].SystemPrompt);
         Assert.Contains("Never calculate", model.Conversations[0].SystemPrompt);
+        Assert.Contains("screenshots and SMS notifications alone do not prove funds arrived", model.Conversations[0].SystemPrompt);
+        Assert.Contains("Never promise credit", model.Conversations[0].SystemPrompt);
+        Assert.Contains("unpaid invoice is money owed, not cash received", model.Conversations[0].SystemPrompt);
 
         var step = Assert.Single(model.Conversations[1].Steps);
         Assert.Contains("253.97", step.Responses[0].Result.GetRawText());
@@ -262,7 +266,7 @@ public class AssistantTests
                 .Handle(CancellationToken.None);
         }
 
-        Assert.Equal(7, (await ListAsync(owner)).Count);
+        Assert.Equal(8, (await ListAsync(owner)).Count);
         Assert.Equal("list_overdue_invoices", Assert.Single(await ListAsync(staff)).Name);
     }
 }

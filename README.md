@@ -46,22 +46,36 @@ The opening balance includes issued invoices and payments before the start date.
 - A person reviews and approves. Approval creates a **draft** bill only. The AI never creates a finalized record.
 
 **AI financial assistant**
-- `POST /api/assistant/ask` with seven read-only tools: financial summary, year comparison, expense report,
-  receivables aging, payables aging, overdue invoices, bills due.
+- `POST /api/assistant/ask` with eight read-only tools: financial summary, year comparison, expense report,
+  receivables aging, payables aging, 30-day cash-flow forecast, overdue invoices, and bills due.
 - Tools are filtered by the caller's role. The model never writes SQL and never calculates figures. Every answer
   includes the verified source data so users can check it.
 - Off by default (`Assistant__Enabled=false`). Nothing is sent to Google until it is enabled with a key.
+- Plain-language financial education and payment-safety rules remind users that unpaid invoices are not cash,
+  profit is an estimate, and screenshots or SMS messages alone do not prove funds arrived.
 
 **Reports and audit**
 - Dashboard, expense report, financial summary (accrual and cash side by side), year-over-year comparison,
   receivables aging, payables aging.
+- `GET /api/reports/cash-flow-forecast` lists outstanding invoices and supplier bills due in the next 30 days,
+  with overdue balances shown separately. It reports expected cash movement, not an available bank balance; it
+  excludes an opening balance, unrecorded costs, recurring expenses, and historical pattern estimates.
+- `GET /api/reports/financial-records` previews period activity plus current unpaid customer/supplier balances;
+  `GET /api/reports/financial-records/pdf` downloads the same tenant-scoped report. It explains its limitations,
+  avoids credit scores or loan promises. The frontend offers a privacy acknowledgement and an optional native
+  device share sheet where supported; the user selects and confirms any destination.
 - Append-only audit log written automatically on every save.
+
+The frontend adds a **Financial health** view using those tenant-scoped reports, plus **Learn & stay safe** guidance.
+Both are connected to existing APIs and do not add a financial score or claim access to credit.
 
 ## Not built yet (roadmap)
 
-Subscriptions and Paystack, scanned-PDF extraction (OCR), object storage
-for documents, malware scanning, credit notes, recurring invoices, multi-currency, logo upload, account lockout,
-two-factor authentication, and a frontend.
+Direct report-recipient integrations with persistent consent, saved starting balance and cash-shortage warnings, recurring-expense
+forecasting, full offline support, seeded demonstration data, scanned-PDF
+OCR, object storage for documents, malware scanning, logo upload, account lockout, and two-factor authentication.
+The Paystack payment and subscription integrations, credit notes, recurring invoices and frontend are implemented,
+but live provider flows and all client workflows still require deployment-level verification.
 
 ## Architecture
 

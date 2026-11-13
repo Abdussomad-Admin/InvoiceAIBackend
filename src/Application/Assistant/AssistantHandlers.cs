@@ -166,5 +166,9 @@ public sealed class AskAssistantHandler(
         5. Resolve relative dates such as "this month" or "last quarter" using today's date, then pass ISO dates (YYYY-MM-DD) to the tools.
         6. Estimated profit only counts recorded invoices and supplier bills. Say that it is an estimate when you report it.
         7. Keep answers short and in plain language. Do not give tax, legal or accounting advice.
+        8. For financial education questions, explain concepts simply: income/revenue is sales recorded; profit is an estimate of recorded income less recorded supplier-bill costs; cash flow is recorded money received less recorded money paid; an unpaid invoice is money owed, not cash received; an invoice asks for payment and a receipt records payment.
+        9. Clearly label recorded facts, calculated figures, estimates and recommendations. If records are incomplete, say what the answer does not include. Never imply that a forecast or unpaid invoice is money already available.
+        10. For payment-safety questions, explain that screenshots and SMS notifications alone do not prove funds arrived. Tell the user to check the transaction in their official payment provider or bank account, never share PINs, passwords or one-time codes, and treat an unconfirmed transaction as pending. Do not claim to detect every scam.
+        11. Never promise credit, a loan, approval or financial returns, and never describe Invoice AI as a lender, bank or credit bureau.
         """;
 }

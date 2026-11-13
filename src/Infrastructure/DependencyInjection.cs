@@ -73,6 +73,7 @@ public static class DependencyInjection
         services.AddSingleton<IInvoicePdfRenderer, QuestPdfInvoiceRenderer>();
         services.AddSingleton<ICreditNotePdfRenderer, QuestPdfCreditNoteRenderer>();
         services.AddSingleton<ICustomerStatementPdfRenderer, QuestPdfCustomerStatementRenderer>();
+        services.AddSingleton<IFinancialRecordsPdfRenderer, QuestPdfFinancialRecordsRenderer>();
 
         services.AddScoped<ISupplierRepository, SupplierRepository>();
         services.AddScoped<IBillRepository, BillRepository>();
@@ -85,6 +86,7 @@ public static class DependencyInjection
         services.AddScoped<IAssistantTool, ExpenseReportTool>();
         services.AddScoped<IAssistantTool, ReceivablesAgingTool>();
         services.AddScoped<IAssistantTool, PayablesAgingTool>();
+        services.AddScoped<IAssistantTool, CashFlowForecastTool>();
         services.AddScoped<IAssistantTool, OverdueInvoicesTool>();
         services.AddScoped<IAssistantTool, BillsDueTool>();
         services.AddHttpClient<IAssistantModel, GemmaAssistantModel>();

@@ -1,0 +1,49 @@
+# Invoice AI — USPF Financial Inclusion Implementation Status
+
+Updated 13 November 2026. This is a code inspection and local verification snapshot, not a claim that the full
+competition checklist is complete. “Implemented and verified” is reserved for behavior with direct test evidence;
+production provider workflows and mobile/browser behavior still need live checks.
+
+## Requirements coverage
+
+| Area | Status | Evidence and remaining work |
+|---|---|---|
+| Authentication, business workspaces, roles, permissions, email verification and tenant isolation | PARTIALLY IMPLEMENTED | Backend auth, membership, permissions and tenant-isolation tests exist (`src/Application/Auth`, `src/Application/Organizations`, `Tests/AuthTests.cs`, `Tests/PermissionTests.cs`, `Tests/TenantIsolationTests.cs`). Re-run the suites and validate deployed email/login flows before claiming verified. |
+| Invoices, customers, numbering, PDFs, email, balances, statements and manual payment records | PARTIALLY IMPLEMENTED | APIs/UI and focused tests exist (`src/Host/Controllers/InvoicesController.cs`, `PaymentsController.cs`, `CustomerStatementsController.cs`, `Tests/InvoiceFlowTests.cs`, `Tests/InvoicePdfTests.cs`, `Tests/SendInvoiceTests.cs`). Live email delivery and end-to-end customer workflows still need deployment verification. |
+| Paystack invoice payments, subaccounts and subscription payments | PARTIALLY IMPLEMENTED | Invoice checkout is tied to the workspace subaccount, public return verification and signed webhooks are implemented (`src/Host/Controllers/InvoicePaymentsController.cs`, `src/Host/InvoicePaymentWebhookProcessor.cs`). Test/live credentials, Paystack dashboard configuration, webhook delivery, actual refund/reversal outcomes and business settlement need live verification. |
+| Supplier bills, supplier payments, reversal history and bill extraction review | PARTIALLY IMPLEMENTED | Tenant-scoped workflows and tests exist (`src/Host/Controllers/SupplierBillsController.cs`, `BillPaymentsController.cs`, `SupplierDocumentsController.cs`, `Tests/SupplierBillTests.cs`, `Tests/PayablesTests.cs`, `Tests/ApprovalTests.cs`). OCR for scanned PDFs and a separate general-purpose expense ledger are not established; reported expenses are based on supplier bills. |
+| Historical reports and aging calculations | PARTIALLY IMPLEMENTED | Summary, year comparison, expenses and receivable/payable aging APIs and report views exist (`src/Application/Reports`, `src/Host/Controllers/FinancialReportsController.cs`, `PayablesReportsController.cs`, `ReceivablesController.cs`). Existing calculation tests need to be rerun as part of release verification. |
+| Business Financial Health | PARTIALLY IMPLEMENTED | New `/app/financial-health` view uses existing summary and aging APIs, offers month/30-day/90-day/year ranges, separates cash movement from estimated profit and includes record-keeping caveats (`InvoiceAIFrontend/src/Workspace.jsx`). Browser behavior and period data need user-account verification. |
+| 30-day cash-flow forecast | PARTIALLY IMPLEMENTED | New authenticated `GET /api/reports/cash-flow-forecast` and assistant tool use outstanding invoice/bill due dates (`src/Application/Reports/CashFlowForecast.cs`, `src/Host/Controllers/FinancialReportsController.cs`, `src/Application/Assistant/AssistantTools.cs`). Unit tests were added (`Tests/CashFlowForecastTests.cs`) but still need execution. This forecasts due movement only: no opening balance, recurring costs, unrecorded costs, historic pattern prediction or shortage claim. |
+| Financial education and payment-safety guidance | PARTIALLY IMPLEMENTED | New `/app/financial-guidance` page and assistant prompt explain revenue, estimated profit, cash flow, invoices versus receipts, and payment verification. The UI and assistant should be checked against configured live AI and with target users; no claim that the system detects all fraud. |
+| Business Financial Records / Credit Readiness PDF | PARTIALLY IMPLEMENTED | New authenticated `/api/reports/financial-records` preview data and `/api/reports/financial-records/pdf` download use tenant-scoped financial summaries, aging balances and monthly records. `/app/financial-records` offers period selection, preview, download, a privacy acknowledgement and optional device share sheet. No automatic external sharing, credit score, lender approval guarantee, or lender integration is provided. Target-user and deployed browser verification remain. |
+| Privacy, consent and external report sharing | PARTIALLY IMPLEMENTED | Authentication, permissions, organization data filters, upload validation and append-only audit logging exist. Report download/share requires a user acknowledgement; on supported browsers, the native share sheet lets the user select the destination. Persistent share/revoke audit, retention/deletion policy and data-at-rest protection have not been established by this audit. |
+| Bank statement import and reconciliation | PARTIALLY IMPLEMENTED | CSV/XLSX imports, duplicate file-hash refusal, suggestions, matching and ignore actions are implemented (`src/Application/Banking`, `src/Host/Controllers/BankStatementsController.cs`, `Tests/FinancialTests.cs`). Matching links a statement line to a payment already recorded; it does not independently create or confirm a payment. Deployment and representative statement testing remain. |
+| Affordability and accessibility | PARTIALLY IMPLEMENTED | Free and paid monthly plans exist (`src/Host/BillingSettings.cs`, frontend pricing and billing pages). Price research with freelancers/microbusinesses, local-language testing, low-data measurement and accessibility checks remain. |
+| Low-connectivity support | NOT IMPLEMENTED | No offline transaction processing, synced drafts, visible synchronization state or robust queued retry/idempotency workflow was established. Full offline processing is not required for the initial MVP, but lightweight behavior and safe retries remain open. |
+| Partnerships and direct financial-service referrals | NOT APPLICABLE for initial MVP | No live institution integration was found. Do not advertise a partnership or loan pathway until one is real and approved. |
+| Fictional end-to-end demo scenario and seeded records | NOT IMPLEMENTED | No clearly labelled tailoring-business demo dataset and walkthrough were found. |
+| Competition application materials and measured impact | NOT IMPLEMENTED | Product/application narrative, screenshots, team details, roadmap and actual user impact evidence remain to prepare. Never invent impact numbers. |
+
+## Changes made in this pass
+
+- Added the financial-health page and period selection in `InvoiceAIFrontend/src/Workspace.jsx`.
+- Added plain-language financial basics and payment-safety guidance in `InvoiceAIFrontend/src/Workspace.jsx`.
+- Added the authenticated 30-day due-item forecast in `src/Application/Reports/CashFlowForecast.cs` and exposed it through `src/Host/Controllers/FinancialReportsController.cs`.
+- Added the forecast to the role-filtered AI assistant and strengthened its instructions against invented figures, unsupported credit promises and payment-screenshot claims (`src/Application/Assistant/AssistantTools.cs`, `src/Application/Assistant/AssistantHandlers.cs`).
+- Added forecast and assistant regression tests (`Tests/CashFlowForecastTests.cs`, `Tests/AssistantTests.cs`).
+- Added an authenticated financial-records preview/PDF flow (`src/Application/Reports/FinancialRecordsReport.cs`, `src/Host/Controllers/FinancialReportsController.cs`, `src/Infrastructure/Pdf/QuestPdfFinancialRecordsRenderer.cs`, `InvoiceAIFrontend/src/Workspace.jsx`). The PDF distinguishes period activity from current outstanding balances and explains record limitations. A privacy acknowledgement gates export; supported browsers open the device's native share sheet only after an explicit user action.
+- Updated README to match these features and their limitations.
+- Verification on 13 November 2026: frontend `npm run build` passed; .NET Application, Infrastructure and Host builds passed with project-reference builds disabled after the normal project graph build returned an empty MSBuild failure. The backend test project compiled, but VSTest could not connect to the testhost within 90 seconds and aborted; tests are not reported as passed.
+
+## Still required before a defensible submission
+
+1. Run the targeted and full backend suites and verify the deployed Render API and Vercel client workflows.
+2. Add persistent sharing consent, access expiry and revoke/audit behavior if direct external sharing integrations are added; current native sharing is user-mediated and does not upload the report to an Invoice AI recipient service.
+3. Add a fictional, clearly labelled demo business dataset and rehearse the complete payment-to-report scenario.
+4. Check privacy notices, consent, retention/deletion, data protection and payment safety with appropriate technical/legal review.
+5. Validate pricing, mobile usability, low-connectivity behavior and financial wording with actual target users; do not invent impact metrics.
+6. Prepare the application narrative, current product screenshots, team information and evidence-backed impact plan.
+
+The official challenge page currently lists the application deadline as 15 November 2026, 11:59 p.m. WAT. Confirm the portal and
+eligibility details directly before submission.

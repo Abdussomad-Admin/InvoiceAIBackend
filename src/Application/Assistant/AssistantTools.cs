@@ -132,6 +132,19 @@ public sealed class PayablesAgingTool(GetPayablesAgingHandler handler) : IAssist
     }
 }
 
+public sealed class CashFlowForecastTool(GetCashFlowForecastHandler handler) : IAssistantTool
+{
+    public ToolDefinition Definition { get; } = new(
+        "get_cash_flow_forecast",
+        "Shows outstanding invoices and supplier bills due in the next 30 days, overdue amounts separately, and the assumptions. Expected payments are not guaranteed and this is not a bank balance.",
+        []);
+
+    public Permission RequiredPermission => Permission.ViewReports;
+
+    public async Task<object> ExecuteAsync(IReadOnlyDictionary<string, JsonElement> arguments, CancellationToken cancellationToken)
+        => await handler.Handle(cancellationToken);
+}
+
 public sealed class OverdueInvoicesTool(ListInvoicesHandler handler) : IAssistantTool
 {
     public ToolDefinition Definition { get; } = new(
