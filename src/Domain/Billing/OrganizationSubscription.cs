@@ -23,6 +23,13 @@ public sealed class OrganizationSubscription : BaseEntity, ITenantOwned
         => new() { OrganizationId = organizationId, PlanCode = planCode, CurrencyCode = currencyCode,
             AmountMinor = amountMinor, Status = SubscriptionStatus.Pending };
 
+    public void ChangePlan(string planCode, string currencyCode, long amountMinor)
+    {
+        PlanCode = planCode;
+        CurrencyCode = currencyCode;
+        AmountMinor = amountMinor;
+    }
+
     public void Activate(string? customerCode, string? subscriptionCode, DateTimeOffset now, DateTimeOffset? periodEnd = null)
     {
         Status = SubscriptionStatus.Active;

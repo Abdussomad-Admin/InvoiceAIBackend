@@ -177,12 +177,15 @@ public sealed class BillingController(
         var updated = await db.BillingCheckouts.IgnoreQueryFilters()
             .AsNoTracking()
             .SingleAsync(x => x.Reference == reference && x.OrganizationId == organizationId, ct);
+        var subscription = await db.OrganizationSubscriptions.AsNoTracking().SingleOrDefaultAsync(ct);
         return Ok(new
         {
             status = updated.Status.ToString(),
             updated.PlanCode,
             updated.CurrencyCode,
-            updated.AmountMinor
+            updated.AmountMinor,
+            currentPlanCode = subscription?.PlanCode,
+            subscriptionStatus = subscription?.Status.ToString()
         });
     }
 
@@ -301,13 +304,9 @@ public sealed class BillingController(
                     checkout.CurrencyCode, checkout.AmountMinor);
                 db.OrganizationSubscriptions.Add(sub);
             }
-            else if (sub.PlanCode != checkout.PlanCode)
-            {
+            else
                 // A plan change is committed only after the new charge is verified.
-                db.Entry(sub).Property(x => x.PlanCode).CurrentValue = checkout.PlanCode;
-                db.Entry(sub).Property(x => x.CurrencyCode).CurrentValue = checkout.CurrencyCode;
-                db.Entry(sub).Property(x => x.AmountMinor).CurrentValue = checkout.AmountMinor;
-            }
+                sub.ChangePlan(checkout.PlanCode, checkout.CurrencyCode, checkout.AmountMinor);
             sub.Activate(customerCode, subscriptionCode, now, periodEnd);
             await db.SaveChangesAsync(ct);
         }
