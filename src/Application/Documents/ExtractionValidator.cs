@@ -15,8 +15,8 @@ public static class ExtractionValidator
         if (bill.SupplierName is null)
             Add("supplierName", IssueSeverity.Warning, "The supplier name was not found. Choose the supplier yourself.");
 
-        if (bill.InvoiceNumber is null)
-            Add("invoiceNumber", IssueSeverity.Error, "The invoice number was not found.");
+        if (bill.InvoiceNumber is null && bill.Reference is null)
+            Add("invoiceNumber", IssueSeverity.Error, "The invoice or transaction reference was not found.");
 
         if (bill.InvoiceDate is not { } date)
             Add("invoiceDate", IssueSeverity.Error, "The invoice date was not found or could not be read reliably.");

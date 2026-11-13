@@ -35,7 +35,8 @@ public static class ExtractionParser
                 Text(root, "invoiceNumber", 100, truncate: false),
                 Date(root, "invoiceDate"), Date(root, "dueDate"),
                 currency is not null && CurrencyCode.IsMatch(currency) ? currency : null,
-                Number(root, "subtotal"), Number(root, "taxTotal"), Number(root, "total"), Lines(root));
+                Number(root, "subtotal"), Number(root, "taxTotal"), Number(root, "total"), Lines(root),
+                Text(root, "reference", 120, truncate: false));
         }
         catch (JsonException)
         {
