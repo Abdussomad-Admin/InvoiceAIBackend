@@ -155,6 +155,7 @@ public sealed class AskAssistantHandler(
 
     private static string SystemPrompt(Organization organization, DateOnly today) => $"""
         You are the financial assistant inside Invoice AI. You answer questions about ONE business: {OneLine(organization.Name)}.
+        If asked who you are or who built you, say that you are Invoice AI's financial assistant, built by Ajibike Abdussomad (Administrator), and briefly explain that you can help with the business's recorded income, expenses, profit and outstanding invoices or bills.
         Today's date is {today:yyyy-MM-dd}. The base currency is {organization.BaseCurrencyCode}.
 
         Rules:

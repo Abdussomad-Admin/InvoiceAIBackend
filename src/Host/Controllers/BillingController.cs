@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Application.Common;
 using Application.Common.Interfaces;
 using Domain.Billing;
 using Domain.Organizations;
@@ -20,6 +21,7 @@ public sealed class BillingController(
     IHttpClientFactory clients,
     BillingSettings billing,
     PaystackSettings paystack,
+    AppLinkSettings links,
     TimeProvider clock,
     InvoicePaymentWebhookProcessor invoicePaymentWebhook,
     ILogger<BillingController> logger) : ControllerBase
@@ -120,7 +122,7 @@ public sealed class BillingController(
             currency = plan.CurrencyCode.ToUpperInvariant(),
             plan = plan.PaystackPlanCode,
             reference,
-            callback_url = string.IsNullOrWhiteSpace(paystack.CallbackUrl) ? null : paystack.CallbackUrl,
+            callback_url = $"{links.FrontendBaseUrl.TrimEnd('/')}/app/billing/return",
             metadata = new { organizationId = organizationId.Value, planCode = plan.Code,
                 purpose = existing is null || existing.Status == SubscriptionStatus.Canceled ? "subscription" : "plan_change" }
         });
@@ -148,6 +150,40 @@ public sealed class BillingController(
             logger.LogWarning(ex, "Paystack checkout request failed.");
             return Problem("Could not reach the payment provider.", statusCode: 502);
         }
+    }
+
+    [HttpPost("api/billing/checkout/confirm")]
+    [Authorize(Policy = nameof(Permission.ViewData))]
+    public async Task<IActionResult> ConfirmCheckout([FromQuery] string reference, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+            return BadRequest(new { error = "The payment reference is missing." });
+        var organizationId = currentOrganization.OrganizationId;
+        if (organizationId is null) return BadRequest(new { error = "No active workspace." });
+
+        var checkout = await db.BillingCheckouts.IgnoreQueryFilters()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Reference == reference && x.OrganizationId == organizationId, ct);
+        if (checkout is null) return NotFound(new { error = "This payment could not be found in your workspace." });
+
+        // Treat the browser redirect only as a signal to check. The provider's verified
+        // transaction response is still required before the checkout/subscription is saved.
+        if (checkout.Status == BillingCheckoutStatus.Pending)
+        {
+            using var callback = JsonDocument.Parse(JsonSerializer.Serialize(new { reference }));
+            await ProcessSuccessfulCharge(callback.RootElement, clock.GetUtcNow(), ct);
+        }
+
+        var updated = await db.BillingCheckouts.IgnoreQueryFilters()
+            .AsNoTracking()
+            .SingleAsync(x => x.Reference == reference && x.OrganizationId == organizationId, ct);
+        return Ok(new
+        {
+            status = updated.Status.ToString(),
+            updated.PlanCode,
+            updated.CurrencyCode,
+            updated.AmountMinor
+        });
     }
 
     [HttpPost("api/billing/subscription/cancel")]
