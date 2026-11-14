@@ -25,7 +25,7 @@ Updated 14 November 2026. This is a code and build snapshot, not a claim that al
 - Backend 327-test regression suite passed before the separate profit-outlook tool was added. After it was added, the test project compiled successfully, but both a full run and a focused pure-calculation run stalled before test discovery completed. The configured local PostgreSQL service is unavailable and Docker Desktop is not available here, so post-change test execution remains unverified.
 - Backend Application, Infrastructure and Host builds passed after adding the profit-outlook tool.
 - The frontend production build and backend test-project build passed after adding offline draft handling and focused profit-outlook tests.
-- Render `/health` returned HTTP 200 on 14 November 2026. This does not confirm which commit is deployed or that authenticated assistant tool selection works. Current Render and Vercel checks could not be reached from this environment because external DNS resolution failed.
+- Render `/health` returned HTTP 200 (`{"status":"ok"}`), and the Vercel site returned HTTP 200 with the current frontend build assets. The Render health response does not identify its deployed commit or confirm authenticated assistant tool selection.
 
 ## Remaining release checks
 
