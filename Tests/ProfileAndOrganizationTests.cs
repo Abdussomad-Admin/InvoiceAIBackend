@@ -28,14 +28,23 @@ public class ProfileTests
     private static async Task<(string Email, RegisterResult Result)> RegisterAsync()
     {
         var email = $"{Guid.NewGuid()}@example.com";
+        var sender = new CapturingEmailSender();
         await using var ctx = TestDatabase.CreateContext(Clock);
         var handler = new RegisterHandler(
             new UserRepository(ctx), new OrganizationRepository(ctx), new MembershipRepository(ctx),
             ctx, new IdentityPasswordHasher(), AccountTestHelpers.CreateMailer(ctx, Clock),
-            new CapturingEmailSender());
+            sender);
         var result = await handler.Handle(
             new RegisterCommand(email, Password, "Ada Obi", $"Acme {Guid.NewGuid()}"),
             CancellationToken.None);
+
+        await using var verificationContext = TestDatabase.CreateContext(Clock);
+        var verification = new VerifyEmailHandler(
+            new UserTokenRepository(verificationContext), new UserRepository(verificationContext),
+            new SecureTokenService(), new MembershipRepository(verificationContext),
+            AccountTestHelpers.CreateSessions(verificationContext, Clock, Jwt), verificationContext, Clock);
+        await verification.Handle(new VerifyEmailCommand(sender.LastTokenFor(email)), CancellationToken.None);
+
         return (email, result);
     }
 

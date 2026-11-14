@@ -31,13 +31,14 @@ public class AuthTests
         return await handler.Handle(command, CancellationToken.None);
     }
 
-    private static async Task<LoginResult> LoginAsync(LoginCommand command)
+    private static async Task<LoginResult> LoginAsync(LoginCommand command, CapturingEmailSender? sender = null)
     {
+        sender ??= new CapturingEmailSender();
         await using var ctx = TestDatabase.CreateContext(Clock);
         var handler = new LoginHandler(
             new UserRepository(ctx), new MembershipRepository(ctx), ctx,
             new IdentityPasswordHasher(), AccountTestHelpers.CreateSessions(ctx, Clock, Jwt), Clock,
-            AccountTestHelpers.CreateMailer(ctx, Clock), new CapturingEmailSender());
+            AccountTestHelpers.CreateMailer(ctx, Clock), sender);
         return await handler.Handle(command, CancellationToken.None);
     }
 
@@ -76,11 +77,12 @@ public class AuthTests
         var email = $"{Guid.NewGuid()}@example.com";
         var sender = new CapturingEmailSender();
         var registered = await RegisterAsync(NewRegistration(email), sender);
+        var loginSender = new CapturingEmailSender();
 
         await Assert.ThrowsAsync<AuthenticationFailedException>(
-            () => LoginAsync(new LoginCommand(email, "Passw0rd!23")));
+            () => LoginAsync(new LoginCommand(email, "Passw0rd!23"), loginSender));
 
-        await VerifyAsync(sender.LastTokenFor(email), Clock);
+        await VerifyAsync(loginSender.LastTokenFor(email), Clock);
 
         var result = await LoginAsync(new LoginCommand(email, "Passw0rd!23"));
 
@@ -89,12 +91,18 @@ public class AuthTests
     }
 
     [Fact]
-    public async Task Register_WithExistingEmail_Throws()
+    public async Task Register_WithExistingUnverifiedEmail_ResendsVerificationForTheSameAccount()
     {
         var email = $"{Guid.NewGuid()}@example.com";
-        await RegisterAsync(NewRegistration(email));
+        var firstSender = new CapturingEmailSender();
+        var first = await RegisterAsync(NewRegistration(email), firstSender);
+        var resendSender = new CapturingEmailSender();
 
-        await Assert.ThrowsAsync<ConflictException>(() => RegisterAsync(NewRegistration(email)));
+        var second = await RegisterAsync(NewRegistration(email), resendSender);
+
+        Assert.Equal(first.UserId, second.UserId);
+        Assert.Equal(first.OrganizationId, second.OrganizationId);
+        Assert.NotEqual(firstSender.LastTokenFor(email), resendSender.LastTokenFor(email));
     }
 
     [Fact]
