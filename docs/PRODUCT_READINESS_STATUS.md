@@ -22,13 +22,14 @@ Updated 14 November 2026. This is a code and build snapshot, not a claim that al
 ## Verification recorded
 
 - Frontend production build passed after the offline-draft change.
-- Backend 327-test regression suite passed before the separate profit-outlook tool was added. A full rerun after that change aborted because VSTest could not connect to its testhost within 90 seconds; Docker Desktop did not become available in this environment.
+- Backend 327-test regression suite passed before the separate profit-outlook tool was added. After it was added, the test project compiled successfully, but both a full run and a focused pure-calculation run stalled before test discovery completed. The configured local PostgreSQL service is unavailable and Docker Desktop is not available here, so post-change test execution remains unverified.
 - Backend Application, Infrastructure and Host builds passed after adding the profit-outlook tool.
-- Render `/health` returned HTTP 200 on 14 November 2026. This does not confirm which commit is deployed or that authenticated assistant tool selection works. Vercel status was not confirmed.
+- The frontend production build and backend test-project build passed after adding offline draft handling and focused profit-outlook tests.
+- Render `/health` returned HTTP 200 on 14 November 2026. This does not confirm which commit is deployed or that authenticated assistant tool selection works. Current Render and Vercel checks could not be reached from this environment because external DNS resolution failed.
 
 ## Remaining release checks
 
-1. Confirm the new backend revision has deployed to Render and ask Invoice AI for a profit outlook using an account with recorded data.
+1. After the external services are reachable, confirm the new backend revision has deployed to Render and ask Invoice AI for a profit outlook using an account with recorded data.
 2. Verify the offline invoice draft in a browser by disconnecting, editing, refreshing/reopening the form, reconnecting and explicitly saving.
-3. Recheck live authentication/email, Paystack checkout/webhook and subscription updates in their respective environments.
-4. Review user-facing financial estimates, privacy language and payment safety with representative users before making outcome claims.
+3. Recheck live authentication/email, Paystack checkout/webhook and subscription updates in their respective environments; these require the configured provider accounts and test credentials.
+4. Review user-facing financial estimates, privacy language and payment safety with representative users before making outcome claims. This requires real target users and cannot be completed by code changes alone.
