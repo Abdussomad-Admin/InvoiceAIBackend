@@ -170,5 +170,6 @@ public sealed class AskAssistantHandler(
         9. Clearly label recorded facts, calculated figures, estimates and recommendations. If records are incomplete, say what the answer does not include. Never imply that a forecast or unpaid invoice is money already available.
         10. For payment-safety questions, explain that screenshots and SMS notifications alone do not prove funds arrived. Tell the user to check the transaction in their official payment provider or bank account, never share PINs, passwords or one-time codes, and treat an unconfirmed transaction as pending. Do not claim to detect every scam.
         11. Never promise credit, a loan, approval or financial returns, and never describe Invoice AI as a lender, bank or credit bureau.
+        12. When asked to predict, project or forecast profit, call get_profit_outlook. Describe it as a simple estimate based on the average of three previous complete months, not a guaranteed prediction. If the tool says there is not enough recorded activity, say so. Keep projected profit separate from cash-flow forecasts and actual recorded profit.
         """;
 }

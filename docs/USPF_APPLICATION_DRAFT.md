@@ -34,6 +34,7 @@ Many small businesses work with irregular income and lack a consistent, easy-to-
 - Invoice, customer, supplier bill, payment, reporting and bank-statement workflows are implemented in the product code. Their deployed provider flows and target-user usability still require live verification.
 - AI supplier-bill extraction depends on the server’s configured AI capability and internet access; the product must not be presented as working offline for extraction.
 - Financial reports are based on records entered into Invoice AI. The 30-day forecast is based on known invoice and bill due dates; it is not a prediction of all future income or costs.
+- The assistant now has a separate experimental profit outlook based on the average of the previous three complete months. It is a simple run-rate estimate, not a statistical prediction; it excludes unrecorded activity and must be verified with the deployed assistant before being presented as a working live capability.
 - Financial-records PDF export is user initiated. No lender integration, credit score, loan offer or approval guarantee is claimed.
 - Online invoice payment status depends on successful payment-provider verification/webhook delivery; the product must not claim independent bank confirmation.
 

@@ -145,6 +145,19 @@ public sealed class CashFlowForecastTool(GetCashFlowForecastHandler handler) : I
         => await handler.Handle(cancellationToken);
 }
 
+public sealed class ProfitOutlookTool(GetProfitOutlookHandler handler) : IAssistantTool
+{
+    public ToolDefinition Definition { get; } = new(
+        "get_profit_outlook",
+        "Provides a simple estimated-profit outlook for the next full calendar month using the average recorded monthly income and expenses from the previous three complete months. Use for requests to predict, project or forecast profit. It reports when records are insufficient and includes assumptions/limitations; do not call it a cash-flow forecast.",
+        []);
+
+    public Permission RequiredPermission => Permission.ViewReports;
+
+    public async Task<object> ExecuteAsync(IReadOnlyDictionary<string, JsonElement> arguments, CancellationToken cancellationToken)
+        => await handler.Handle(cancellationToken);
+}
+
 public sealed class OverdueInvoicesTool(ListInvoicesHandler handler) : IAssistantTool
 {
     public ToolDefinition Definition { get; } = new(

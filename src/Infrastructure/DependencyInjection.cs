@@ -87,6 +87,7 @@ public static class DependencyInjection
         services.AddScoped<IAssistantTool, ReceivablesAgingTool>();
         services.AddScoped<IAssistantTool, PayablesAgingTool>();
         services.AddScoped<IAssistantTool, CashFlowForecastTool>();
+        services.AddScoped<IAssistantTool, ProfitOutlookTool>();
         services.AddScoped<IAssistantTool, OverdueInvoicesTool>();
         services.AddScoped<IAssistantTool, BillsDueTool>();
         services.AddHttpClient<IAssistantModel, GemmaAssistantModel>();
