@@ -66,6 +66,14 @@ builder.Services.AddSingleton(reminderSettings);
 
 builder.Services.AddInfrastructure(connectionString, jwt, emailSettings);
 
+if (builder.Configuration.GetValue<bool>("DemoScenario:Enabled"))
+{
+    if (!builder.Environment.IsDevelopment())
+        throw new InvalidOperationException("Fictional demo seeding is only available in the Development environment.");
+
+    builder.Services.AddHostedService<DemoScenarioSeeder>();
+}
+
 builder.Services.AddOpenApi(options => options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
 
 // CORS: only the origins listed in configuration may call the API from a browser.

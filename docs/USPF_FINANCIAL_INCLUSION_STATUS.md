@@ -22,7 +22,7 @@ production provider workflows and mobile/browser behavior still need live checks
 | Affordability and accessibility | PARTIALLY IMPLEMENTED | Free and paid monthly plans exist (`src/Host/BillingSettings.cs`, frontend pricing and billing pages). Price research with freelancers/microbusinesses, local-language testing, low-data measurement and accessibility checks remain. |
 | Low-connectivity support | NOT IMPLEMENTED | No offline transaction processing, synced drafts, visible synchronization state or robust queued retry/idempotency workflow was established. Full offline processing is not required for the initial MVP, but lightweight behavior and safe retries remain open. |
 | Partnerships and direct financial-service referrals | NOT APPLICABLE for initial MVP | No live institution integration was found. Do not advertise a partnership or loan pathway until one is real and approved. |
-| Fictional end-to-end demo scenario and seeded records | NOT IMPLEMENTED | No clearly labelled tailoring-business demo dataset and walkthrough were found. |
+| Fictional end-to-end demo scenario and seeded records | PARTIALLY IMPLEMENTED | An opt-in Development-only seeder now creates a separate, clearly labelled Abeokuta tailoring workspace with paid, partial, overdue and future invoices plus supplier bills/payments (`src/Host/Background/DemoScenarioSeeder.cs`, `docs/DEMO_SCENARIO.md`). It never contacts Paystack or sends email; provider-verified checkout must be demonstrated separately with Paystack test credentials. |
 | Competition application materials and measured impact | NOT IMPLEMENTED | Product/application narrative, screenshots, team details, roadmap and actual user impact evidence remain to prepare. Never invent impact numbers. |
 
 ## Changes made in this pass
@@ -33,6 +33,7 @@ production provider workflows and mobile/browser behavior still need live checks
 - Added the forecast to the role-filtered AI assistant and strengthened its instructions against invented figures, unsupported credit promises and payment-screenshot claims (`src/Application/Assistant/AssistantTools.cs`, `src/Application/Assistant/AssistantHandlers.cs`).
 - Added forecast and assistant regression tests (`Tests/CashFlowForecastTests.cs`, `Tests/AssistantTests.cs`).
 - Added an authenticated financial-records preview/PDF flow (`src/Application/Reports/FinancialRecordsReport.cs`, `src/Host/Controllers/FinancialReportsController.cs`, `src/Infrastructure/Pdf/QuestPdfFinancialRecordsRenderer.cs`, `InvoiceAIFrontend/src/Workspace.jsx`). The PDF distinguishes period activity from current outstanding balances and explains record limitations. A privacy acknowledgement gates export; supported browsers open the device's native share sheet only after an explicit user action.
+- Added an opt-in development-only fictional tailoring-business seed and walkthrough (`src/Host/Background/DemoScenarioSeeder.cs`, `docs/DEMO_SCENARIO.md`). It uses a separate demo login, never modifies an existing organization, and makes no fake claim of Paystack verification.
 - Updated README to match these features and their limitations.
 - Verification on 13 November 2026: frontend `npm run build` passed; .NET Application, Infrastructure and Host builds passed with project-reference builds disabled after the normal project graph build returned an empty MSBuild failure. The backend test project compiled, but VSTest could not connect to the testhost within 90 seconds and aborted; tests are not reported as passed.
 
@@ -40,7 +41,7 @@ production provider workflows and mobile/browser behavior still need live checks
 
 1. Run the targeted and full backend suites and verify the deployed Render API and Vercel client workflows.
 2. Add persistent sharing consent, access expiry and revoke/audit behavior if direct external sharing integrations are added; current native sharing is user-mediated and does not upload the report to an Invoice AI recipient service.
-3. Add a fictional, clearly labelled demo business dataset and rehearse the complete payment-to-report scenario.
+3. Run the isolated demo seed locally, rehearse the complete workflow, then verify actual checkout/webhook behavior separately in Paystack test mode.
 4. Check privacy notices, consent, retention/deletion, data protection and payment safety with appropriate technical/legal review.
 5. Validate pricing, mobile usability, low-connectivity behavior and financial wording with actual target users; do not invent impact metrics.
 6. Prepare the application narrative, current product screenshots, team information and evidence-backed impact plan.
