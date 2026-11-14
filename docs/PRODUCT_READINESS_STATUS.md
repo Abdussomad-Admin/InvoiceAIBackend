@@ -22,9 +22,9 @@ Updated 14 November 2026. This is a code and build snapshot, not a claim that al
 ## Verification recorded
 
 - Frontend production build passed after the offline-draft change.
-- Backend 327-test regression suite passed before the separate profit-outlook tool was added.
+- Backend 327-test regression suite passed before the separate profit-outlook tool was added. A full rerun after that change aborted because VSTest could not connect to its testhost within 90 seconds; Docker Desktop did not become available in this environment.
 - Backend Application, Infrastructure and Host builds passed after adding the profit-outlook tool.
-- No current Render or Vercel deployment status was confirmed in this snapshot.
+- Render `/health` returned HTTP 200 on 14 November 2026. This does not confirm which commit is deployed or that authenticated assistant tool selection works. Vercel status was not confirmed.
 
 ## Remaining release checks
 
