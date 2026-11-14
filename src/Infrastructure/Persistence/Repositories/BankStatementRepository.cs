@@ -18,6 +18,16 @@ public sealed class BankStatementRepository(AppDbContext db) : IBankStatementRep
         => await db.BankStatementLines.AsNoTracking().Where(x => x.StatementBatchId == batchId)
             .OrderBy(x => x.RowNumber).ToListAsync(cancellationToken);
 
+    public async Task<BankReconciliationCoverageDto> GetCoverageAsync(CancellationToken cancellationToken = default)
+    {
+        var lines = db.BankStatementLines.AsNoTracking();
+        var imported = await lines.CountAsync(cancellationToken);
+        if (imported == 0) return BankReconciliationCoverageDto.Empty;
+        var matched = await lines.CountAsync(x => x.Status == StatementLineStatus.Matched, cancellationToken);
+        var ignored = await lines.CountAsync(x => x.Status == StatementLineStatus.Ignored, cancellationToken);
+        return new BankReconciliationCoverageDto(imported, matched, ignored, imported - matched - ignored);
+    }
+
     public Task<BankStatementLine?> GetLineAsync(Guid lineId, CancellationToken cancellationToken = default)
         => db.BankStatementLines.FirstOrDefaultAsync(x => x.Id == lineId, cancellationToken);
 

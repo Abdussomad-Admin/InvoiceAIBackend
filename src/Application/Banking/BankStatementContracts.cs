@@ -19,6 +19,10 @@ public sealed record BankInvoiceCandidate(Guid InvoiceId, string? InvoiceNumber,
     decimal Balance, string CurrencyCode, DateOnly? DueDate);
 public sealed record BankStatementSuggestionsDto(IReadOnlyList<BankPaymentCandidate> Payments,
     IReadOnlyList<BankInvoiceCandidate> Invoices);
+public sealed record BankReconciliationCoverageDto(int ImportedLines, int MatchedLines, int IgnoredLines, int UnresolvedLines)
+{
+    public static BankReconciliationCoverageDto Empty { get; } = new(0, 0, 0, 0);
+}
 public sealed record MatchStatementPaymentCommand(Guid PaymentId);
 public sealed record IgnoreStatementLineCommand(string Reason);
 
@@ -27,6 +31,7 @@ public interface IBankStatementRepository
     Task<bool> FileHashExistsAsync(string fileHash, CancellationToken cancellationToken = default);
     Task<BankStatementBatch?> GetBatchAsync(Guid batchId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BankStatementLine>> GetLinesAsync(Guid batchId, CancellationToken cancellationToken = default);
+    Task<BankReconciliationCoverageDto> GetCoverageAsync(CancellationToken cancellationToken = default);
     Task<BankStatementLine?> GetLineAsync(Guid lineId, CancellationToken cancellationToken = default);
     Task<bool> LockLineAsync(Guid lineId, CancellationToken cancellationToken = default);
     Task<bool> LockPaymentAsync(Guid paymentId, CancellationToken cancellationToken = default);
