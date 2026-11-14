@@ -22,7 +22,7 @@ Updated 14 November 2026. This is a code and build snapshot, not a claim that al
 ## Verification recorded
 
 - Frontend production build passed after the offline-draft change.
-- Backend 327-test regression suite passed before the separate profit-outlook tool was added. After it was added, the two focused profit-outlook tests and 96 database-independent backend tests passed. The full PostgreSQL-backed suite remains unverified because the configured local database and Docker Desktop are unavailable.
+- The full backend regression suite passed after the profit-outlook change: 329 passed, 0 failed, 0 skipped. It ran against a temporary PostgreSQL 17 Docker container, which was stopped and removed after the run.
 - Backend Application, Infrastructure and Host builds passed after adding the profit-outlook tool.
 - The frontend production build and backend Host/test-project builds passed after adding offline draft handling and focused profit-outlook tests.
 - Render `/health` returned HTTP 200 (`{"status":"ok"}`), and the Vercel site returned HTTP 200 with the current frontend build assets. The Render health response does not identify its deployed commit or confirm authenticated assistant tool selection.
