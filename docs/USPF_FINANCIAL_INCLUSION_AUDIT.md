@@ -1,6 +1,6 @@
 # Invoice AI — USPF Changemaker 2026 Financial Inclusion Audit
 
-Audit date: 14 November 2026  
+Audit date: 15 November 2026
 Scope: checked the supplied complete requirements prompt against the current React/Vite frontend, ASP.NET Core/.NET 10 backend, PostgreSQL persistence/migrations, API controllers, automated tests and project readiness notes. No USPF-specific branding or duplicate application was added.
 
 ## Status key
@@ -24,8 +24,9 @@ Scope: checked the supplied complete requirements prompt against the current Rea
 | Paystack subaccounts, routes, signed webhook/server verification, invoice updates, duplicate-event handling, refunds/reversals and subscription separation | IMPLEMENTED BUT NOT FULLY VERIFIED | `InvoicePaymentsController`, `BillingController`, payment webhook processor and `OrganizationPaystackAccount` preserve the per-business subaccount architecture and separate subscription billing. Provider credentials, subaccount eligibility, live callback/webhook delivery and settlement reconciliation require Paystack test/live account verification. |
 | Business Financial Health and selectable period | IMPLEMENTED BUT NOT FULLY VERIFIED | `/app/financial-health` displays recorded income, expenses, estimated profit, cash in/out, balances, due amounts, month activity and due-date forecast. Frontend build passed; representative-user interpretation/mobile checks remain. No opaque score is presented. |
 | 30-day cash-flow forecast and warnings | PARTIALLY IMPLEMENTED | `CashFlowForecastBuilder` and `CashFlowForecastTests` verify due-date based incoming/outgoing/overdue amounts and assumptions. It does not include opening bank balance, recurring costs, historical income patterns or a reliable prediction of shortages; expected due dates are not guaranteed receipts. |
+| Planning for financial shocks and resilience | PARTIALLY IMPLEMENTED | Financial health, payment tracking, records and the due-date forecast can help users understand recorded activity. The product does not yet model emergency scenarios or provide savings, insurance or other protection-product pathways; any such integrations need suitable providers and clear terms. |
 | Financial Records / Credit Readiness report, PDF, preview and user-controlled sharing | IMPLEMENTED BUT NOT FULLY VERIFIED | The API and frontend provide business details, totals, monthly activity, balances, preview, PDF download and native share chooser. This audit added actual payment history (latest 100 entries, with a total count), reconciliation coverage and a records checklist to the API/PDF/UI. Sharing now requires an explicit one-time consent checkbox and a user-chosen device destination; download remains local. `FinancialRecordsReportTests` verifies PDF content. No credit score, lender decision, automatic sharing or partner access is claimed. Browser sharing and deployment still need a device check. |
-| Dedicated credit-readiness functionality | PARTIALLY IMPLEMENTED | The report now helps organize financial evidence and clearly states it is not a score or loan decision. It does not evaluate eligibility, produce a credit score or connect to a bureau/lender; this is deliberate without an authorized methodology or legitimate partner. |
+| Dedicated credit-readiness functionality | PARTIALLY IMPLEMENTED | A dedicated `/app/credit-readiness` page now turns the existing organization-scoped records checklist into a user-facing workflow with missing/review-needed labels and links to the relevant tasks. It explicitly does not score users, determine eligibility, guarantee credit or connect to a bureau/lender. A lender-specific readiness pathway still needs an authorized method and legitimate partner. The helper has focused tests; real-user usability still needs validation. |
 | Financial education (revenue/profit/cash flow, records, irregular income, collections, costs, obligations, fees) | PARTIALLY IMPLEMENTED | `/app/financial-guidance` already had plain explanations and safety guidance. This audit added short lessons for recording costs, variable income, follow-up, supplier obligations, provider fees and record keeping. Broader education delivery has not been validated with low-literacy users or translated/localized. |
 | Payment fraud awareness/protection | IMPLEMENTED BUT NOT FULLY VERIFIED | The UI and assistant warn that screenshots/SMS are not proof, direct users to official channels, warn against sharing codes, distinguish pending/recorded/reversed states, and avoid claiming universal scam detection. Paystack verifies online payment server-side. No fraud classifier is claimed; live Paystack lifecycle tests remain external. |
 | Free/entry tier, transparent plans/fees, affordability | PARTIALLY IMPLEMENTED | Free and paid subscription plans/prices are present in the billing catalog, and provider fees/subaccount flow are disclosed where configured. Whether prices and transaction charges are affordable for underserved Nigerian businesses has not been tested with target users. No affordability claim should be made yet. |
@@ -37,6 +38,8 @@ Scope: checked the supplied complete requirements prompt against the current Rea
 | Demo data/scenario, synthetic labels and end-to-end rehearsal | PARTIALLY IMPLEMENTED | A development-only fictional demo seed and scenario docs exist. Complete live rehearsal of all 14 listed steps with provider test credentials and labeled demo account was not performed during this audit. |
 | Competition application evidence and impact measurements | NOT IMPLEMENTED | Product brief material exists, but no verified user counts, inclusion outcomes, affordability study, accessibility study, screenshots package, team submission or partner evidence was verified. Statistics must be measured, never inferred from demo data. |
 
+The challenge is framed as helping underserved Nigerians use financial services safely, affordably and reliably, make informed decisions, build credit readiness and strengthen resilience. The official page presents low-connectivity/assisted access, affordable credit pathways and partnerships, local-language guidance/consumer protection, and small-business resilience as illustrative solution angles. Invoice AI has partial coverage across these areas, but cannot claim validated inclusion outcomes or partner-led services yet. Source: [USPF Financial Inclusion problem statement](https://uspfchangemaker.ng/problems/financial-inclusion).
+
 ## Changes made in this audit
 
 1. Added organization-scoped bank reconciliation coverage to the financial records report API, including imported, matched, ignored and unresolved line counts.
@@ -45,19 +48,20 @@ Scope: checked the supplied complete requirements prompt against the current Rea
 4. Added a report preview section and explicit user-controlled share consent in the frontend. No lender or third-party send endpoint was introduced.
 5. Expanded simple financial education for recording costs, irregular income, invoice follow-up, supplier due dates, payment fees and record keeping.
 6. Added tests for statement row validation, duplicate-file rejection, PostgreSQL tenant-scoped reconciliation coverage and PDF contents.
+7. Added a dedicated, plain-language Credit readiness page to the React workspace, using the existing protected financial-records report endpoint. Added next-step links for missing records and unresolved bank review, with no new score or eligibility claim.
+8. Added three focused frontend unit tests for readiness gaps, prioritizing review-needed items and unavailable report data.
 
 ## Verification performed
 
-- Backend full suite: **334 passed, 0 failed, 0 skipped** against the local PostgreSQL 17 container.
-- ASP.NET Core Host build: **passed, 0 warnings, 0 errors**.
-- Focused report/reconciliation tests after the report-history change: **3 passed, 0 failed**.
+- Frontend `npm test`: **3 passed, 0 failed** (Credit readiness helper).
 - Frontend `npm run build`: **passed** (Vite production build).
-- The database container was stopped initially, started for the test run, and stopped again afterwards.
+- The previous audit run recorded the backend full suite as **334 passed, 0 failed, 0 skipped** against PostgreSQL 17, the ASP.NET Core Host build as passing with zero warnings/errors, and focused report/reconciliation tests as passing. Those earlier results are retained as prior evidence, not represented as a new run today.
+- Backend tests were attempted today but could not restore/build in the current environment (`dotnet test` failed during Restore with no package/source diagnostic); Docker was also unavailable (`docker ps` could not connect to Docker Desktop’s Linux engine). Therefore no current backend or PostgreSQL test result is claimed for this audit pass.
 - No Render/Vercel deployment, live email delivery, Paystack transaction, device share sheet, real-phone accessibility check or user pilot was performed during this audit.
 
 ## Remaining work before external rollout or competition submission
 
-1. Obtain an approved privacy notice, retention period, deletion policy and process; then implement policy-version consent capture and safe deletion/retention controls.
+1. Obtain an owner/legal-approved privacy notice, retention period, deletion policy and process; then implement policy-version acceptance and safe deletion/retention controls. The code does not invent these policy decisions.
 2. Verify Render and Vercel contain the current source and correct secrets, CORS, HTTPS and provider webhook configuration.
 3. Run Paystack test-mode invoice checkout/webhook/refund and subscription flows end to end, then separately verify live-account eligibility and settlement with Paystack.
 4. Verify real mailbox delivery and password/email-verification links.
