@@ -77,7 +77,11 @@ public sealed class InviteMemberHandler(
             "This invitation expires in 7 days.\n";
 
         await emailSender.SendAsync(
-            new OutgoingEmail(email, $"You are invited to join {organization.Name} on Invoice AI", body),
+            new OutgoingEmail(email, $"You are invited to join {organization.Name} on Invoice AI", body,
+                HtmlBody: BrandedEmail.Render("You’re invited to join a workspace",
+                    $"Hello,\n\n{inviter?.FullName ?? "A colleague"} invited you to join {organization.Name} on Invoice AI as {command.Role}.\n\nAccept the invitation to start working with your team.",
+                    "Accept invitation", link,
+                    "This invitation link expires in 7 days. If you were not expecting it, you can ignore this email.")),
             cancellationToken);
 
         return new InvitationDto(invitation.Id, invitation.Email, invitation.Role, invitation.ExpiresAt, invitation.CreatedAt);

@@ -20,7 +20,7 @@ Scope: checked the supplied complete requirements prompt against the current Rea
 | Supplier, bills, costs, supplier payment, balances, reversals and history | IMPLEMENTED BUT NOT FULLY VERIFIED | Supplier/bill/payment handlers and pages exist; tests cover bill/payment rules and tenant boundaries. Live extraction depends on configured AI/OCR providers. Scanned-PDF OCR is not established. |
 | Income, expenses, profit, cash movement, monthly/year comparison and aging reports | IMPLEMENTED AND VERIFIED | `FinancialReportsController`, report handlers and frontend report pages use saved application records; `tests/PaymentTests.cs`, `tests/CashFlowForecastTests.cs` and the full test suite passed. Reports disclose excluded/unrecorded costs. Figures still need reconciliation against a representative user account before making impact claims. |
 | AI assistant: verified figures, plain-language answers, role limits and no invented values | IMPLEMENTED BUT NOT FULLY VERIFIED | `AssistantHandlers.cs` selects application tools and contains financial-safety instructions; `tests/AssistantTests.cs` verifies data, role access and organization isolation. Live model configuration/tool choice on Render was not rechecked. |
-| Bank statement import, validation, duplicate file detection, matching, ignored/unmatched state | IMPLEMENTED AND VERIFIED | `BankStatementsController`, import/reconciliation handlers and repositories support CSV/XLSX upload, SHA-256 duplicate-file detection and explicit match/ignore actions. The new coverage tests verify empty state counts and organization isolation. This is uploaded-statement support, not direct bank integration or proof that a payment settled. |
+| Bank statement import, validation, duplicate file detection, matching, ignored/unmatched state | IMPLEMENTED BUT NOT FULLY VERIFIED | `BankStatementsController`, import/reconciliation handlers and repositories support CSV/XLSX upload, row validation, SHA-256 duplicate-file detection and explicit match/ignore actions. New tests cover row validation, duplicate-file rejection, coverage counts and organization isolation. Deduplication is at whole-file level; identical transactions imported in different files are not automatically deduplicated. Direct bank integration and proof of funds are not claimed. |
 | Paystack subaccounts, routes, signed webhook/server verification, invoice updates, duplicate-event handling, refunds/reversals and subscription separation | IMPLEMENTED BUT NOT FULLY VERIFIED | `InvoicePaymentsController`, `BillingController`, payment webhook processor and `OrganizationPaystackAccount` preserve the per-business subaccount architecture and separate subscription billing. Provider credentials, subaccount eligibility, live callback/webhook delivery and settlement reconciliation require Paystack test/live account verification. |
 | Business Financial Health and selectable period | IMPLEMENTED BUT NOT FULLY VERIFIED | `/app/financial-health` displays recorded income, expenses, estimated profit, cash in/out, balances, due amounts, month activity and due-date forecast. Frontend build passed; representative-user interpretation/mobile checks remain. No opaque score is presented. |
 | 30-day cash-flow forecast and warnings | PARTIALLY IMPLEMENTED | `CashFlowForecastBuilder` and `CashFlowForecastTests` verify due-date based incoming/outgoing/overdue amounts and assumptions. It does not include opening bank balance, recurring costs, historical income patterns or a reliable prediction of shortages; expected due dates are not guaranteed receipts. |
@@ -44,15 +44,15 @@ Scope: checked the supplied complete requirements prompt against the current Rea
 3. Added dated customer and supplier payment history to the report and PDF, marking reversed entries and limiting the displayed list to the latest 100 while retaining the full count.
 4. Added a report preview section and explicit user-controlled share consent in the frontend. No lender or third-party send endpoint was introduced.
 5. Expanded simple financial education for recording costs, irregular income, invoice follow-up, supplier due dates, payment fees and record keeping.
-6. Added tests for PostgreSQL tenant-scoped reconciliation coverage and PDF contents.
+6. Added tests for statement row validation, duplicate-file rejection, PostgreSQL tenant-scoped reconciliation coverage and PDF contents.
 
 ## Verification performed
 
-- Backend full suite: **332 passed, 0 failed, 0 skipped** against the local PostgreSQL 17 container.
+- Backend full suite: **334 passed, 0 failed, 0 skipped** against the local PostgreSQL 17 container.
 - ASP.NET Core Host build: **passed, 0 warnings, 0 errors**.
 - Focused report/reconciliation tests after the report-history change: **3 passed, 0 failed**.
 - Frontend `npm run build`: **passed** (Vite production build).
-- The database container was stopped initially; it was started for the test run and is currently running.
+- The database container was stopped initially, started for the test run, and stopped again afterwards.
 - No Render/Vercel deployment, live email delivery, Paystack transaction, device share sheet, real-phone accessibility check or user pilot was performed during this audit.
 
 ## Remaining work before external rollout or competition submission

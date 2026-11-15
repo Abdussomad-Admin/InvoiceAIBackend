@@ -48,10 +48,14 @@ public sealed class AccountMailer(
     public async Task<OutgoingEmail> BuildPasswordResetAsync(User user, CancellationToken cancellationToken)
     {
         var token = await IssueAsync(user.Id, UserTokenPurpose.PasswordReset, ResetLifetime, cancellationToken);
+        var link = Link("reset-password", token);
+        var body = $"Hello {user.FullName},\n\nUse the button below to choose a new password for your Invoice AI account.\n\nThis link expires in 1 hour. If you did not ask for this, you can ignore this email.";
         return new OutgoingEmail(
             user.Email,
             "Reset your Invoice AI password",
-            $"Hello {user.FullName},\n\nUse this link to choose a new password:\n{Link("reset-password", token)}\n\nThis link expires in 1 hour. If you did not ask for this, ignore this email.\n");
+            $"{body}\n\nReset password: {link}\n",
+            HtmlBody: BrandedEmail.Render("Reset your password", body, "Reset password", link,
+                "This secure link expires in 1 hour. If you did not request a password reset, ignore this email."));
     }
 
     private async Task<string> IssueAsync(

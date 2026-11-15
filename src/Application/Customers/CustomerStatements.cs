@@ -220,7 +220,10 @@ public sealed class SendCustomerStatementHandler(
             $"Closing balance: {file.CurrencyCode} {file.ClosingBalance.ToString("N2", CultureInfo.InvariantCulture)}", "",
             "Thank you,", file.OrganizationName);
         var email = new OutgoingEmail(file.CustomerEmail, subject, body,
-            [new EmailAttachment(file.FileName, "application/pdf", file.Content)], file.OrganizationEmail);
+            [new EmailAttachment(file.FileName, "application/pdf", file.Content)], file.OrganizationEmail,
+            HtmlBody: BrandedEmail.Render("Your statement is ready",
+                $"Hello {file.CustomerName},\n\nYour statement of account for {period} is attached as a PDF.\n\nClosing balance: {file.CurrencyCode} {file.ClosingBalance.ToString("N2", CultureInfo.InvariantCulture)}\n\nThank you,\n{file.OrganizationName}",
+                footer: $"Sent securely with Invoice AI on behalf of {file.OrganizationName}."));
 
         if (!await emailSender.SendAsync(email, cancellationToken))
             throw new EmailDeliveryException("The customer statement email could not be sent. Please try again later.");

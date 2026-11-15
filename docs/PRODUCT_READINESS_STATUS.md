@@ -26,9 +26,9 @@ The full requirement-by-requirement USPF financial inclusion audit is in [`USPF_
 
 ## Verification recorded in this audit
 
-- Backend full suite: 332 passed, 0 failed, 0 skipped, against local PostgreSQL 17.
+- Backend full suite: 334 passed, 0 failed, 0 skipped, against local PostgreSQL 17.
 - ASP.NET Core Host build passed with 0 warnings and 0 errors.
 - Focused financial-record PDF and reconciliation coverage tests passed (3 tests).
 - Frontend Vite production build passed.
-- The existing `invoiceai-db` Docker container was started to run tests and remains running after the test run.
+- The existing `invoiceai-db` Docker container was started to run tests and stopped again after the test run.
 - Render/Vercel, email, live Paystack, mobile/accessibility, user comprehension, and pilot outcomes were not verified in this audit.

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Application.Common;
 using Application.Common.Interfaces;
 using Domain.Email;
 using Domain.Invoices;
@@ -113,7 +114,8 @@ public sealed class EmailOutboxProcessor(
         try
         {
             var accepted = await sender.SendAsync(
-                new OutgoingEmail(email.To, email.Subject, email.Body, ReplyTo: email.ReplyTo), cancellationToken);
+                new OutgoingEmail(email.To, email.Subject, email.Body, ReplyTo: email.ReplyTo,
+                    HtmlBody: BrandedEmail.FromPlainText(email.Body, "Payment reminder")), cancellationToken);
             if (!accepted) throw new InvalidOperationException("Email provider rejected the message.");
             email.MarkSent(clock.GetUtcNow());
         }
