@@ -21,6 +21,11 @@ public sealed class RecurringInvoicesController(RecurringInvoiceHandlers handler
     public async Task<ActionResult<RecurringInvoiceDto>> Create(CreateRecurringInvoiceCommand command, CancellationToken ct)
         => Ok(await handlers.Create(command, ct));
 
+    [HttpPut("{id:guid}")]
+    [Authorize(Policy = nameof(Permission.ManageInvoices))]
+    public async Task<ActionResult<RecurringInvoiceDto>> Update(Guid id, CreateRecurringInvoiceCommand command, CancellationToken ct)
+        => Ok(await handlers.Update(id, command, ct));
+
     [HttpPost("{id:guid}/pause")]
     [Authorize(Policy = nameof(Permission.ManageInvoices))]
     public async Task<ActionResult<RecurringInvoiceDto>> Pause(Guid id, CancellationToken ct)

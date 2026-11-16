@@ -35,14 +35,55 @@ public sealed class RecurringInvoiceSchedule : BaseEntity, ITenantOwned
         var baseCurrency = Guard.IsoCode(baseCurrencyCode, 3, nameof(BaseCurrencyCode));
         if (currency == baseCurrency) exchangeRateToBase = 1m;
         else if (exchangeRateToBase <= 0m || exchangeRateToBase > 1_000_000m) throw new DomainException("Enter a valid exchange rate to workspace currency.");
+        var normalizedLines = ValidateLines(organizationId, customerId, currency, baseCurrency,
+            exchangeRateToBase, paymentTermsDays, lines);
         return new RecurringInvoiceSchedule { OrganizationId = organizationId, CustomerId = customerId,
             Description = Guard.NotBlank(description, nameof(Description), 200), CurrencyCode = currency,
             BaseCurrencyCode = baseCurrency, ExchangeRateToBase = decimal.Round(exchangeRateToBase, 8),
-            LinesJson = JsonSerializer.Serialize(lines), Frequency = frequency, NextRunOn = firstRunOn,
+            LinesJson = JsonSerializer.Serialize(normalizedLines), Frequency = frequency, NextRunOn = firstRunOn,
             PaymentTermsDays = paymentTermsDays, IsActive = true };
     }
 
+    public void Update(Guid customerId, string description, string currencyCode, string baseCurrencyCode,
+        decimal exchangeRateToBase, IReadOnlyList<LineInput> lines, RecurrenceFrequency frequency,
+        DateOnly nextRunOn, int paymentTermsDays)
+    {
+        if (customerId == Guid.Empty) throw new DomainException("Choose a customer.");
+        if (lines.Count is < 1 or > Invoice.MaxLines) throw new DomainException("Add between 1 and 200 invoice lines.");
+        if (!Enum.IsDefined(frequency)) throw new DomainException("Choose a valid recurrence frequency.");
+        if (paymentTermsDays is < 0 or > 365) throw new DomainException("Payment terms must be between 0 and 365 days.");
+        var currency = Guard.IsoCode(currencyCode, 3, nameof(CurrencyCode));
+        var baseCurrency = Guard.IsoCode(baseCurrencyCode, 3, nameof(BaseCurrencyCode));
+        if (currency == baseCurrency) exchangeRateToBase = 1m;
+        else if (exchangeRateToBase <= 0m || exchangeRateToBase > 1_000_000m)
+            throw new DomainException("Enter a valid exchange rate to workspace currency.");
+        var normalizedLines = ValidateLines(OrganizationId, customerId, currency, baseCurrency,
+            exchangeRateToBase, paymentTermsDays, lines);
+
+        CustomerId = customerId;
+        Description = Guard.NotBlank(description, nameof(Description), 200);
+        CurrencyCode = currency;
+        BaseCurrencyCode = baseCurrency;
+        ExchangeRateToBase = decimal.Round(exchangeRateToBase, 8);
+        LinesJson = JsonSerializer.Serialize(normalizedLines);
+        Frequency = frequency;
+        NextRunOn = nextRunOn;
+        PaymentTermsDays = paymentTermsDays;
+    }
+
     public IReadOnlyList<LineInput> Lines() => JsonSerializer.Deserialize<List<LineInput>>(LinesJson) ?? [];
+
+    private static IReadOnlyList<LineInput> ValidateLines(Guid organizationId, Guid customerId,
+        string currencyCode, string baseCurrencyCode, decimal exchangeRateToBase, int paymentTermsDays,
+        IReadOnlyList<LineInput> lines)
+    {
+        var draft = Invoice.CreateDraft(organizationId, customerId, currencyCode, paymentTermsDays,
+            null, baseCurrencyCode, exchangeRateToBase);
+        draft.ReplaceLines(lines);
+        return draft.Lines.Select(line => new LineInput(line.Description, line.Quantity, line.UnitPrice,
+            line.DiscountPercent, line.TaxRatePercent)).ToList();
+    }
+
     public void Pause() => IsActive = false;
     public void Resume() => IsActive = true;
     public DateOnly Advance()

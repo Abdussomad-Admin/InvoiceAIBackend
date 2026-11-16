@@ -10,8 +10,9 @@ namespace Host.Background;
 
 public sealed class EmailOutboxProcessor(
     AppDbContext db, IEmailSender sender, TimeProvider clock, ReminderSettings settings,
-    ILogger<EmailOutboxProcessor> logger)
+    ILogger<EmailOutboxProcessor> logger, AppLinkSettings links)
 {
+    private const string PaymentLinkPrefix = "Pay securely: ";
     private static readonly (string Key, int OffsetDays, string Label)[] ReminderPoints =
     [
         ("before-7", -7, "is due in 7 days"),
@@ -40,12 +41,15 @@ public sealed class EmailOutboxProcessor(
             join organization in db.Organizations.AsNoTracking()
                 on invoice.OrganizationId equals organization.Id
             where (invoice.Status == InvoiceStatus.Issued || invoice.Status == InvoiceStatus.PartiallyPaid)
-                  && invoice.DueDate != null && invoice.AmountPaid < invoice.Total
+                  && invoice.DueDate != null
+                  && invoice.Total - invoice.AmountPaid - invoice.AmountCredited > 0
+                  && invoice.SentCount > 0 && invoice.PublicPaymentToken != null
                   && customer.Email != null && customer.Email != ""
                   && !customer.IsArchived && !organization.IsArchived
             select new ReminderInvoice(
                 invoice.Id, invoice.OrganizationId, invoice.Number!, invoice.CurrencyCode,
-                invoice.Total - invoice.AmountPaid, invoice.DueDate!.Value,
+                invoice.Total - invoice.AmountPaid - invoice.AmountCredited,
+                invoice.DueDate!.Value, invoice.PublicPaymentToken!,
                 customer.Name, customer.Email!, organization.Name, organization.Email,
                 organization.TimeZoneId)
         ).ToListAsync(cancellationToken);
@@ -67,6 +71,7 @@ public sealed class EmailOutboxProcessor(
             }
 
             var localToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime);
+            var paymentUrl = $"{links.FrontendBaseUrl.TrimEnd('/')}/?pay={Uri.EscapeDataString(invoice.PaymentToken)}";
             foreach (var point in ReminderPoints)
             {
                 if (localToday < invoice.DueDate.AddDays(point.OffsetDays)) continue;
@@ -74,7 +79,7 @@ public sealed class EmailOutboxProcessor(
                     invoice.OrganizationId, $"reminder:{invoice.InvoiceId:N}:{point.Key}",
                     invoice.CustomerEmail, invoice.OrganizationEmail,
                     $"Payment reminder: invoice {invoice.Number} {point.Label}",
-                    $"Hello {invoice.CustomerName},\n\nInvoice {invoice.Number} from {invoice.OrganizationName} {point.Label}.\nOutstanding balance: {invoice.CurrencyCode} {invoice.Balance.ToString("N2", CultureInfo.InvariantCulture)}.\n\nPlease contact {invoice.OrganizationName} if you have already paid.\n\nThank you,\n{invoice.OrganizationName}", now);
+                    $"Hello {invoice.CustomerName},\n\nInvoice {invoice.Number} from {invoice.OrganizationName} {point.Label}.\nOutstanding balance: {invoice.CurrencyCode} {invoice.Balance.ToString("N2", CultureInfo.InvariantCulture)}.\nDue date: {invoice.DueDate:dd MMM yyyy}.\n\n{PaymentLinkPrefix}{paymentUrl}\n\nIf you have already paid, please contact {invoice.OrganizationName} so they can update their records.\n\nThank you,\n{invoice.OrganizationName}", now);
 
                 // The unique key makes repeated scans and multiple worker instances idempotent.
                 await db.Database.ExecuteSqlInterpolatedAsync($"""
@@ -111,11 +116,26 @@ public sealed class EmailOutboxProcessor(
 
         var email = await db.EmailOutbox.IgnoreQueryFilters()
             .FirstAsync(x => x.Id == ids[0], cancellationToken);
+        if (TryGetReminderInvoiceId(email.IdempotencyKey, out var invoiceId))
+        {
+            var stillOwed = await db.Invoices.IgnoreQueryFilters().AsNoTracking().AnyAsync(invoice =>
+                invoice.Id == invoiceId && invoice.SentCount > 0
+                && (invoice.Status == InvoiceStatus.Issued || invoice.Status == InvoiceStatus.PartiallyPaid)
+                && invoice.Total - invoice.AmountPaid - invoice.AmountCredited > 0,
+                cancellationToken);
+            if (!stillOwed)
+            {
+                email.MarkFailed("Reminder cancelled because the invoice is no longer eligible.", now, deadLetter: true);
+                await db.SaveChangesAsync(cancellationToken);
+                return true;
+            }
+        }
+
         try
         {
             var accepted = await sender.SendAsync(
                 new OutgoingEmail(email.To, email.Subject, email.Body, ReplyTo: email.ReplyTo,
-                    HtmlBody: BrandedEmail.FromPlainText(email.Body, "Payment reminder")), cancellationToken);
+                    HtmlBody: ReminderHtml(email.Body)), cancellationToken);
             if (!accepted) throw new InvalidOperationException("Email provider rejected the message.");
             email.MarkSent(clock.GetUtcNow());
         }
@@ -136,8 +156,27 @@ public sealed class EmailOutboxProcessor(
         return true;
     }
 
+    private static string ReminderHtml(string body)
+    {
+        var paymentLine = body.Split('\n').FirstOrDefault(line => line.StartsWith(PaymentLinkPrefix, StringComparison.Ordinal));
+        if (paymentLine is null)
+            return BrandedEmail.FromPlainText(body, "Payment reminder");
+
+        var paymentUrl = paymentLine[PaymentLinkPrefix.Length..].Trim();
+        var content = string.Join('\n', body.Split('\n').Where(line => !line.StartsWith(PaymentLinkPrefix, StringComparison.Ordinal))).Trim();
+        return BrandedEmail.Render("Payment reminder", content, "Pay now", paymentUrl,
+            "A secure payment link for your outstanding invoice.");
+    }
+
+    private static bool TryGetReminderInvoiceId(string idempotencyKey, out Guid invoiceId)
+    {
+        invoiceId = Guid.Empty;
+        var parts = idempotencyKey.Split(':');
+        return parts.Length == 3 && parts[0] == "reminder" && Guid.TryParseExact(parts[1], "N", out invoiceId);
+    }
+
     private sealed record ReminderInvoice(
         Guid InvoiceId, Guid OrganizationId, string Number, string CurrencyCode, decimal Balance,
-        DateOnly DueDate, string CustomerName, string CustomerEmail, string OrganizationName,
+        DateOnly DueDate, string PaymentToken, string CustomerName, string CustomerEmail, string OrganizationName,
         string? OrganizationEmail, string TimeZoneId);
 }
