@@ -186,9 +186,23 @@ public sealed class InvoicePaymentsController(
         var organization = await db.Organizations.AsNoTracking().SingleOrDefaultAsync(o => o.Id == invoice.OrganizationId, ct);
         var customer = await db.Customers.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(c => c.Id == invoice.CustomerId && c.OrganizationId == invoice.OrganizationId, ct);
         if (organization is null || customer is null) return NotFound();
+        var account = await db.OrganizationPaystackAccounts.IgnoreQueryFilters().AsNoTracking()
+            .SingleOrDefaultAsync(a => a.OrganizationId == invoice.OrganizationId, ct);
+        var paymentUnavailableMessage = !paystack.Enabled || string.IsNullOrWhiteSpace(paystack.SecretKey)
+            ? "Online payments are temporarily unavailable. Please contact the business to arrange payment."
+            : account is null || !CanCollect(account)
+                ? "This business is still setting up online payments. Please contact the business to arrange payment another way."
+                : !string.Equals(account.CurrencyCode, invoice.CurrencyCode, StringComparison.OrdinalIgnoreCase)
+                    ? "This invoice’s currency is not supported for online payment. Please contact the business to arrange payment."
+                    : string.IsNullOrWhiteSpace(customer.Email)
+                        ? "Online payment is not available for this invoice yet. Please contact the business to arrange payment."
+                        : null;
+        var invoiceCanBePaid = invoice.Balance > 0
+            && invoice.Status is InvoiceStatus.Issued or InvoiceStatus.PartiallyPaid;
         return Ok(new { invoice.Number, businessName = organization.Name, customerName = customer.Name,
             invoice.CurrencyCode, invoice.Total, invoice.AmountPaid, invoice.Balance, invoice.DueDate,
-            status = invoice.Status.ToString(), canPay = invoice.Balance > 0 && invoice.Status is InvoiceStatus.Issued or InvoiceStatus.PartiallyPaid });
+            status = invoice.Status.ToString(), canPay = invoiceCanBePaid && paymentUnavailableMessage is null,
+            paymentUnavailableMessage = invoiceCanBePaid ? paymentUnavailableMessage : null });
     }
 
     [HttpPost("api/public/invoices/{token}/confirm")]
@@ -231,8 +245,10 @@ public sealed class InvoicePaymentsController(
         if (invoice is null || invoice.Status is not (InvoiceStatus.Issued or InvoiceStatus.PartiallyPaid) || invoice.Balance <= 0) return NotFound();
         var account = await db.OrganizationPaystackAccounts.IgnoreQueryFilters()
             .SingleOrDefaultAsync(a => a.OrganizationId == invoice.OrganizationId, ct);
-        if (account is null || !CanCollect(account) || account.CurrencyCode != invoice.CurrencyCode)
+        if (account is null || !CanCollect(account))
             return Conflict(new { error = "This business is still completing payment account verification." });
+        if (!string.Equals(account.CurrencyCode, invoice.CurrencyCode, StringComparison.OrdinalIgnoreCase))
+            return Conflict(new { error = "This invoice currency is not supported by the business payment account." });
         var customer = await db.Customers.IgnoreQueryFilters().AsNoTracking()
             .SingleOrDefaultAsync(c => c.Id == invoice.CustomerId && c.OrganizationId == invoice.OrganizationId, ct);
         if (customer?.Email is null) return Conflict(new { error = "The business needs to add an email address for this customer before accepting online payment." });
