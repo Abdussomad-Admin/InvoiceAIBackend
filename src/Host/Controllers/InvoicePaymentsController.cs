@@ -240,7 +240,10 @@ public sealed class InvoicePaymentsController(
         var previous = await db.InvoicePaymentCheckouts.IgnoreQueryFilters()
             .Where(c => c.InvoiceId == invoice.Id && c.Status == InvoicePaymentCheckoutStatus.Pending)
             .OrderByDescending(c => c.CreatedAt).FirstOrDefaultAsync(ct);
-        if (previous is not null && previous.CreatedAt > clock.GetUtcNow().AddMinutes(-30))
+        var pendingWindow = previous is not null && string.IsNullOrWhiteSpace(previous.AuthorizationUrl)
+            ? TimeSpan.FromMinutes(2)
+            : TimeSpan.FromMinutes(30);
+        if (previous is not null && previous.CreatedAt > clock.GetUtcNow().Subtract(pendingWindow))
         {
             if (!string.IsNullOrWhiteSpace(previous.AuthorizationUrl))
                 return Ok(new { reference = previous.Reference, authorizationUrl = previous.AuthorizationUrl });
