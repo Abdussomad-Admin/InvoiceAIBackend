@@ -46,7 +46,7 @@ public sealed class InvoicePaymentsController(
         var primary = accounts.FirstOrDefault(x => x.CurrencyCode == organization.BaseCurrencyCode) ?? accounts.FirstOrDefault();
         return Ok(new
         {
-            status = accounts.Count == 0 ? "Not set up" : accounts.Any(CanCollect) ? "Ready" : "Pending verification",
+            status = accounts.Count == 0 || accounts.All(x => !x.IsActive) ? "Setup needed" : accounts.Any(CanCollect) ? "Ready" : "Pending verification",
             organization.BaseCurrencyCode, organization.CountryCode,
             defaultPaymentCurrencyCode = DefaultPaymentCurrency(organization.CountryCode, organization.BaseCurrencyCode),
             currencyCode = primary?.CurrencyCode,
@@ -60,6 +60,26 @@ public sealed class InvoicePaymentsController(
                 isTestMode = TestMode, account.LastCheckedAt
             })
         });
+    }
+
+    [HttpDelete("api/payment-accounts/paystack/{currencyCode}")]
+    [Authorize(Policy = nameof(Permission.ManageOrganization))]
+    public async Task<IActionResult> RemoveAccountLink(string currencyCode, CancellationToken ct)
+    {
+        var organizationId = currentOrganization.OrganizationId;
+        if (organizationId is null) return BadRequest(new { error = "No active business workspace." });
+        var currency = currencyCode.Trim().ToUpperInvariant();
+        if (currency.Length != 3) return BadRequest(new { error = "Enter a valid account currency." });
+
+        var account = await db.OrganizationPaystackAccounts.SingleOrDefaultAsync(
+            x => x.OrganizationId == organizationId.Value && x.CurrencyCode == currency, ct);
+        if (account is null) return NotFound(new { error = "That payment account is no longer connected." });
+        if (account.IsActive)
+            return Conflict(new { error = "This payment account is active. Deactivate or delete it in Paystack before removing its Invoice AI link." });
+
+        db.OrganizationPaystackAccounts.Remove(account);
+        await db.SaveChangesAsync(ct);
+        return await Account(ct);
     }
 
     [HttpGet("api/payment-accounts/paystack/banks")]
