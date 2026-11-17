@@ -15,7 +15,7 @@ public sealed class OrganizationPaystackAccountConfiguration : IEntityTypeConfig
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.SubaccountCode).IsRequired().HasMaxLength(100);
         builder.Property(x => x.CurrencyCode).IsRequired().HasMaxLength(3).IsFixedLength();
-        builder.HasIndex(x => x.OrganizationId).IsUnique();
+        builder.HasIndex(x => new { x.OrganizationId, x.CurrencyCode }).IsUnique();
         builder.HasIndex(x => x.SubaccountCode).IsUnique();
         builder.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
     }

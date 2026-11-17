@@ -323,10 +323,10 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrganizationId")
+                    b.HasIndex("SubaccountCode")
                         .IsUnique();
 
-                    b.HasIndex("SubaccountCode")
+                    b.HasIndex("OrganizationId", "CurrencyCode")
                         .IsUnique();
 
                     b.ToTable("OrganizationPaystackAccounts", (string)null);

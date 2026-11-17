@@ -32,11 +32,33 @@ public sealed class InvoicePaymentsController(
     [Authorize(Policy = nameof(Permission.ManageOrganization))]
     public async Task<IActionResult> Account(CancellationToken ct)
     {
-        var account = await db.OrganizationPaystackAccounts.AsNoTracking().SingleOrDefaultAsync(ct);
-        return account is null ? Ok(new { status = "Not set up" }) : Ok(new
+        var organizationId = currentOrganization.OrganizationId;
+        if (organizationId is null) return BadRequest(new { error = "No active business workspace." });
+        var organization = await db.Organizations.AsNoTracking()
+            .Where(x => x.Id == organizationId.Value)
+            .Select(x => new { x.BaseCurrencyCode, x.CountryCode })
+            .SingleOrDefaultAsync(ct);
+        if (organization is null) return NotFound();
+        var accounts = await db.OrganizationPaystackAccounts.AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId.Value)
+            .OrderBy(x => x.CurrencyCode)
+            .ToListAsync(ct);
+        var primary = accounts.FirstOrDefault(x => x.CurrencyCode == organization.BaseCurrencyCode) ?? accounts.FirstOrDefault();
+        return Ok(new
         {
-            status = CanCollect(account) ? TestMode && !account.IsVerified ? "Test mode ready" : "Ready" : "Pending verification",
-            account.CurrencyCode, account.IsActive, account.IsVerified, isTestMode = TestMode, account.LastCheckedAt
+            status = accounts.Count == 0 ? "Not set up" : accounts.Any(CanCollect) ? "Ready" : "Pending verification",
+            organization.BaseCurrencyCode, organization.CountryCode,
+            defaultPaymentCurrencyCode = DefaultPaymentCurrency(organization.CountryCode, organization.BaseCurrencyCode),
+            currencyCode = primary?.CurrencyCode,
+            isActive = primary?.IsActive ?? false,
+            isVerified = primary?.IsVerified ?? false,
+            isTestMode = TestMode,
+            accounts = accounts.Select(account => new
+            {
+                status = CanCollect(account) ? TestMode && !account.IsVerified ? "Test mode ready" : "Ready" : "Pending verification",
+                account.CurrencyCode, account.IsActive, account.IsVerified,
+                isTestMode = TestMode, account.LastCheckedAt
+            })
         });
     }
 
@@ -105,14 +127,16 @@ public sealed class InvoicePaymentsController(
             return Problem("Online payments are not configured yet.", statusCode: 503);
         var organizationId = currentOrganization.OrganizationId;
         if (organizationId is null) return BadRequest(new { error = "No active business workspace." });
-        if (await db.OrganizationPaystackAccounts.AnyAsync(ct))
-            return Conflict(new { error = "A Paystack account is already linked to this business." });
         if (input.AccountNumber.Length is < 8 or > 20 || input.BankCode.Length is < 2 or > 20
             || paystack.PlatformPercentageCharge is < 0 or > 100)
             return BadRequest(new { error = "Enter valid bank details." });
 
         var organization = await db.Organizations.AsNoTracking().SingleOrDefaultAsync(o => o.Id == organizationId, ct);
         if (organization is null) return NotFound();
+        var defaultPaymentCurrency = DefaultPaymentCurrency(organization.CountryCode, organization.BaseCurrencyCode);
+        if (await db.OrganizationPaystackAccounts.AnyAsync(x => x.OrganizationId == organizationId.Value
+                && x.CurrencyCode == defaultPaymentCurrency, ct))
+            return Conflict(new { error = $"A {defaultPaymentCurrency} Paystack account is already connected." });
         using var client = clients.CreateClient("Paystack");
         using var request = new HttpRequestMessage(HttpMethod.Post, "subaccount");
         request.Headers.Authorization = new("Bearer", paystack.SecretKey);
@@ -137,6 +161,8 @@ public sealed class InvoicePaymentsController(
             }
             var currency = TryString(data, "currency", out var returnedCurrency)
                 ? returnedCurrency : organization.BaseCurrencyCode;
+            if (await db.OrganizationPaystackAccounts.AnyAsync(x => x.OrganizationId == organizationId.Value && x.CurrencyCode == currency, ct))
+                return Conflict(new { error = $"A Paystack account for {currency} is already connected." });
             var account = OrganizationPaystackAccount.Create(organizationId.Value, code, currency);
             account.RefreshProviderStatus(
                 data.TryGetProperty("active", out var active) && active.ValueKind == JsonValueKind.True,
@@ -144,7 +170,7 @@ public sealed class InvoicePaymentsController(
                 clock.GetUtcNow());
             db.OrganizationPaystackAccounts.Add(account);
             await db.SaveChangesAsync(ct);
-            return Ok(new { status = CanCollect(account) ? TestMode && !account.IsVerified ? "Test mode ready" : "Ready" : "Pending verification", account.CurrencyCode, account.IsActive, account.IsVerified, isTestMode = TestMode });
+            return await Account(ct);
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException
                                    || ex is TaskCanceledException && !ct.IsCancellationRequested)
@@ -154,26 +180,76 @@ public sealed class InvoicePaymentsController(
         }
     }
 
+    [HttpPost("api/payment-accounts/paystack/link")]
+    [Authorize(Policy = nameof(Permission.ManageOrganization))]
+    public async Task<IActionResult> LinkUsdAccount(LinkPaystackUsdAccountRequest input, CancellationToken ct)
+    {
+        if (!paystack.Enabled || string.IsNullOrWhiteSpace(paystack.SecretKey))
+            return Problem("Online payments are not configured yet.", statusCode: 503);
+        var organizationId = currentOrganization.OrganizationId;
+        if (organizationId is null) return BadRequest(new { error = "No active business workspace." });
+        var countryCode = await db.Organizations.AsNoTracking().Where(x => x.Id == organizationId.Value)
+            .Select(x => x.CountryCode).SingleOrDefaultAsync(ct);
+        if (countryCode?.ToUpperInvariant() is not ("NG" or "KE"))
+            return BadRequest(new { error = "Paystack USD accounts are only available to eligible businesses in Nigeria or Kenya." });
+        if (string.IsNullOrWhiteSpace(input.SubaccountCode) || input.SubaccountCode.Length > 100)
+            return BadRequest(new { error = "Enter the USD subaccount code from your Paystack dashboard." });
+        if (await db.OrganizationPaystackAccounts.AnyAsync(x => x.OrganizationId == organizationId.Value && x.CurrencyCode == "USD", ct))
+            return Conflict(new { error = "A USD Paystack account is already connected." });
+
+        using var client = clients.CreateClient("Paystack");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"subaccount/{Uri.EscapeDataString(input.SubaccountCode.Trim())}");
+        request.Headers.Authorization = new("Bearer", paystack.SecretKey);
+        try
+        {
+            using var response = await client.SendAsync(request, ct);
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            if (!response.IsSuccessStatusCode || !json.RootElement.TryGetProperty("data", out var data)
+                || !TryString(data, "subaccount_code", out var code))
+                return BadRequest(new { error = "Paystack could not find that subaccount. Check the code and make sure it belongs to this Paystack business." });
+            if (!TryString(data, "currency", out var currency) || !string.Equals(currency, "USD", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { error = "That Paystack subaccount is not set up in USD. Create a USD subaccount in Paystack and try again." });
+            var active = data.TryGetProperty("active", out var activeValue) && activeValue.ValueKind == JsonValueKind.True;
+            var verified = data.TryGetProperty("is_verified", out var verifiedValue) && verifiedValue.ValueKind == JsonValueKind.True;
+            if (!active) return BadRequest(new { error = "That Paystack USD subaccount is inactive. Activate it in Paystack before connecting it." });
+
+            var account = OrganizationPaystackAccount.Create(organizationId.Value, code, "USD");
+            account.RefreshProviderStatus(active, verified, clock.GetUtcNow());
+            db.OrganizationPaystackAccounts.Add(account);
+            await db.SaveChangesAsync(ct);
+            return await Account(ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException
+                                   || ex is TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Could not verify a USD Paystack subaccount.");
+            return Problem("Could not verify the USD account with Paystack. Please try again later.", statusCode: 502);
+        }
+    }
+
     [HttpPost("api/payment-accounts/paystack/refresh")]
     [Authorize(Policy = nameof(Permission.ManageOrganization))]
     public async Task<IActionResult> RefreshAccount(CancellationToken ct)
     {
         if (!paystack.Enabled || string.IsNullOrWhiteSpace(paystack.SecretKey)) return Problem("Online payments are not configured yet.", statusCode: 503);
-        var account = await db.OrganizationPaystackAccounts.SingleOrDefaultAsync(ct);
-        if (account is null) return NotFound(new { error = "Set up a Paystack account first." });
+        var accounts = await db.OrganizationPaystackAccounts.ToListAsync(ct);
+        if (accounts.Count == 0) return NotFound(new { error = "Set up a Paystack account first." });
         using var client = clients.CreateClient("Paystack");
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"subaccount/{Uri.EscapeDataString(account.SubaccountCode)}");
-        request.Headers.Authorization = new("Bearer", paystack.SecretKey);
-        using var response = await client.SendAsync(request, ct);
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-        if (!response.IsSuccessStatusCode || !json.RootElement.TryGetProperty("data", out var data))
-            return Problem("Paystack could not confirm this account yet.", statusCode: 502);
-        var currency = TryString(data, "currency", out var code) ? code : account.CurrencyCode;
-        var active = data.TryGetProperty("active", out var a) && a.ValueKind == JsonValueKind.True;
-        var verified = data.TryGetProperty("is_verified", out var v) && v.ValueKind == JsonValueKind.True;
-        account.RefreshProviderStatus(active && string.Equals(currency, account.CurrencyCode, StringComparison.OrdinalIgnoreCase), verified, clock.GetUtcNow());
+        foreach (var account in accounts)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"subaccount/{Uri.EscapeDataString(account.SubaccountCode)}");
+            request.Headers.Authorization = new("Bearer", paystack.SecretKey);
+            using var response = await client.SendAsync(request, ct);
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            if (!response.IsSuccessStatusCode || !json.RootElement.TryGetProperty("data", out var data))
+                return Problem("Paystack could not confirm one of your connected accounts yet.", statusCode: 502);
+            var currency = TryString(data, "currency", out var code) ? code : account.CurrencyCode;
+            var active = data.TryGetProperty("active", out var a) && a.ValueKind == JsonValueKind.True;
+            var verified = data.TryGetProperty("is_verified", out var v) && v.ValueKind == JsonValueKind.True;
+            account.RefreshProviderStatus(active && string.Equals(currency, account.CurrencyCode, StringComparison.OrdinalIgnoreCase), verified, clock.GetUtcNow());
+        }
         await db.SaveChangesAsync(ct);
-        return Ok(new { status = CanCollect(account) ? TestMode && !account.IsVerified ? "Test mode ready" : "Ready" : "Pending verification", account.CurrencyCode, account.IsActive, account.IsVerified, isTestMode = TestMode, account.LastCheckedAt });
+        return await Account(ct);
     }
 
     [HttpGet("api/public/invoices/{token}")]
@@ -186,22 +262,24 @@ public sealed class InvoicePaymentsController(
         var organization = await db.Organizations.AsNoTracking().SingleOrDefaultAsync(o => o.Id == invoice.OrganizationId, ct);
         var customer = await db.Customers.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(c => c.Id == invoice.CustomerId && c.OrganizationId == invoice.OrganizationId, ct);
         if (organization is null || customer is null) return NotFound();
-        var account = await db.OrganizationPaystackAccounts.IgnoreQueryFilters().AsNoTracking()
-            .SingleOrDefaultAsync(a => a.OrganizationId == invoice.OrganizationId, ct);
+        var accounts = await db.OrganizationPaystackAccounts.IgnoreQueryFilters().AsNoTracking()
+            .Where(a => a.OrganizationId == invoice.OrganizationId).ToListAsync(ct);
+        var account = accounts.SingleOrDefault(a => a.CurrencyCode == invoice.CurrencyCode);
         var paymentUnavailableMessage = !paystack.Enabled || string.IsNullOrWhiteSpace(paystack.SecretKey)
             ? "Online payments are temporarily unavailable. Please contact the business to arrange payment."
+            : account is null && accounts.Any(CanCollect)
+                ? $"This invoice is in {invoice.CurrencyCode}, but online payments are ready for {string.Join(", ", accounts.Where(CanCollect).Select(x => x.CurrencyCode).Distinct().Order())}. Ask the business to connect a {invoice.CurrencyCode} Paystack account or send an invoice in a connected currency."
             : account is null || !CanCollect(account)
                 ? "This business is still setting up online payments. Please contact the business to arrange payment another way."
-                : !string.Equals(account.CurrencyCode, invoice.CurrencyCode, StringComparison.OrdinalIgnoreCase)
-                    ? "This invoice’s currency is not supported for online payment. Please contact the business to arrange payment."
-                    : string.IsNullOrWhiteSpace(customer.Email)
-                        ? "Online payment is not available for this invoice yet. Please contact the business to arrange payment."
-                        : null;
+            : string.IsNullOrWhiteSpace(customer.Email)
+                ? "Online payment is not available for this invoice yet. Please contact the business to arrange payment."
+            : null;
         var invoiceCanBePaid = invoice.Balance > 0
             && invoice.Status is InvoiceStatus.Issued or InvoiceStatus.PartiallyPaid;
         return Ok(new { invoice.Number, businessName = organization.Name, customerName = customer.Name,
             invoice.CurrencyCode, invoice.Total, invoice.AmountPaid, invoice.Balance, invoice.DueDate,
             status = invoice.Status.ToString(), canPay = invoiceCanBePaid && paymentUnavailableMessage is null,
+            availablePaymentCurrencies = accounts.Where(CanCollect).Select(x => x.CurrencyCode).Distinct().Order().ToArray(),
             paymentUnavailableMessage = invoiceCanBePaid ? paymentUnavailableMessage : null });
     }
 
@@ -244,11 +322,9 @@ public sealed class InvoicePaymentsController(
         var invoice = await db.Invoices.IgnoreQueryFilters().SingleOrDefaultAsync(i => i.PublicPaymentToken == token, ct);
         if (invoice is null || invoice.Status is not (InvoiceStatus.Issued or InvoiceStatus.PartiallyPaid) || invoice.Balance <= 0) return NotFound();
         var account = await db.OrganizationPaystackAccounts.IgnoreQueryFilters()
-            .SingleOrDefaultAsync(a => a.OrganizationId == invoice.OrganizationId, ct);
+            .SingleOrDefaultAsync(a => a.OrganizationId == invoice.OrganizationId && a.CurrencyCode == invoice.CurrencyCode, ct);
         if (account is null || !CanCollect(account))
             return Conflict(new { error = "This business is still completing payment account verification." });
-        if (!string.Equals(account.CurrencyCode, invoice.CurrencyCode, StringComparison.OrdinalIgnoreCase))
-            return Conflict(new { error = "This invoice currency is not supported by the business payment account." });
         var customer = await db.Customers.IgnoreQueryFilters().AsNoTracking()
             .SingleOrDefaultAsync(c => c.Id == invoice.CustomerId && c.OrganizationId == invoice.OrganizationId, ct);
         if (customer?.Email is null) return Conflict(new { error = "The business needs to add an email address for this customer before accepting online payment." });
@@ -343,6 +419,14 @@ public sealed class InvoicePaymentsController(
 
     private bool TestMode => paystack.SecretKey.StartsWith("sk_test_", StringComparison.Ordinal);
     private bool CanCollect(OrganizationPaystackAccount account) => account.IsActive && (account.IsVerified || TestMode);
+    private static string DefaultPaymentCurrency(string? countryCode, string fallback) => countryCode?.ToUpperInvariant() switch
+    {
+        "NG" => "NGN",
+        "GH" => "GHS",
+        "KE" => "KES",
+        "ZA" => "ZAR",
+        _ => fallback
+    };
 
     private static bool ValidLegacySignature(string raw, string signature, string secret)
     {
@@ -366,3 +450,4 @@ public sealed class InvoicePaymentsController(
 }
 
 public sealed record CreatePaystackAccountRequest(string BankCode, string AccountNumber);
+public sealed record LinkPaystackUsdAccountRequest(string SubaccountCode);

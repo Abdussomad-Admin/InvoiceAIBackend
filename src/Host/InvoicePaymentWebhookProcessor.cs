@@ -37,7 +37,8 @@ public sealed class InvoicePaymentWebhookProcessor(
         var hasSubaccountCode = TryString(verified, "subaccount_code", out var subaccountCode)
                                 || TryNestedString(verified, "subaccount", "subaccount_code", out subaccountCode);
         var account = await db.OrganizationPaystackAccounts.IgnoreQueryFilters()
-            .SingleOrDefaultAsync(a => a.OrganizationId == checkout.OrganizationId, ct);
+            .SingleOrDefaultAsync(a => a.OrganizationId == checkout.OrganizationId
+                                       && a.CurrencyCode == checkout.CurrencyCode, ct);
         var testMode = paystack.SecretKey.StartsWith("sk_test_", StringComparison.Ordinal);
         if (account is null || !account.IsActive || (!account.IsVerified && !testMode)
             || (hasSubaccountCode && account.SubaccountCode != subaccountCode)) return;
