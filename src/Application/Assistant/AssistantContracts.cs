@@ -5,6 +5,10 @@ namespace Application.Assistant;
 
 public sealed record AskAssistantCommand(string? Question);
 
+public sealed record StartAssistantSessionCommand(string? Question);
+
+public sealed record ExecuteAssistantToolCommand(System.Text.Json.JsonElement Arguments);
+
 public sealed record ToolParameter(string Name, string Type, string Description, bool Required);
 
 public sealed record ToolDefinition(string Name, string Description, IReadOnlyList<ToolParameter> Parameters);
@@ -25,7 +29,14 @@ public sealed record AssistantSourceDto(string Tool, JsonElement Arguments, Json
 
 public sealed record AssistantAnswerDto(string Answer, IReadOnlyList<AssistantSourceDto> Sources, string Notice);
 
-public sealed record AssistantToolInfoDto(string Name, string Description);
+public sealed record AssistantToolInfoDto(string Name, string Description, IReadOnlyList<ToolParameter> Parameters);
+
+public sealed record AssistantSessionDto(
+    IReadOnlyList<AssistantToolInfoDto> Tools, string Notice, int MaxToolRounds,
+    string Today, string BaseCurrencyCode, string BusinessName, string Model);
+
+public sealed record AssistantToolResultDto(string Tool, System.Text.Json.JsonElement Arguments,
+    System.Text.Json.JsonElement Data, bool Succeeded);
 
 public interface IAssistantModel
 {

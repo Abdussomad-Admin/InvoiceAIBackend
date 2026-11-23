@@ -62,6 +62,8 @@ public sealed class ExtractionReviewBuilder(ISupplierRepository suppliers, IBill
     }
 }
 
+// Retained for existing automated tests and rollback compatibility only. It is deliberately not
+// registered in production DI and has no HTTP route; production bill extraction uses Firebase AI Logic.
 public sealed class ExtractDocumentHandler(
     IDocumentRepository documents, IDocumentStorage storage, IDocumentExtractionModel model,
     IDocumentExtractionRepository history, ExtractionReviewBuilder review, IOrganizationRepository organizations,
@@ -69,74 +71,49 @@ public sealed class ExtractDocumentHandler(
     AssistantSettings settings, TimeProvider clock, IPlanLimitChecker? planLimits = null)
 {
     private const int MaxPromptChars = 30_000;
-
     public static readonly JsonSerializerOptions StoredJson = new(JsonSerializerDefaults.Web);
 
     public async Task<ExtractionReviewDto> Handle(Guid documentId, CancellationToken cancellationToken)
     {
-        if (!settings.Enabled)
-            throw new AssistantUnavailableException("AI features are not enabled on this server.");
-
+        if (!settings.Enabled) throw new AssistantUnavailableException("AI features are not enabled on this server.");
         var userId = currentUser.UserId ?? throw new AuthenticationFailedException("Not signed in.");
         var organization = await InvoiceLookups.OrganizationAsync(organizations, currentOrganization, cancellationToken);
-
         var document = await documents.GetByIdAsync(documentId, cancellationToken)
             ?? throw new NotFoundException("Document not found.");
-
         document.EnsureCanExtract();
         if (planLimits is not null) await planLimits.EnsureAiExtractionCapacityAsync(cancellationToken);
-
         if (document.Kind == DocumentKind.Pdf && !document.HasTextLayer)
             throw new DomainException("This PDF has no readable text, so it may be a scan. Upload a photo or image of the invoice instead.");
 
         var request = await BuildRequestAsync(document, cancellationToken);
-
         var timer = Stopwatch.StartNew();
         ExtractedBill? bill = null;
         string? raw = null;
         string? error = null;
         var outage = false;
-
         try
         {
             raw = await model.ExtractAsync(request, cancellationToken);
             bill = ExtractionParser.Parse(raw);
         }
-        catch (AssistantUnavailableException ex)
-        {
-            error = ex.Message;
-            outage = true;
-        }
-        catch (DomainException ex)
-        {
-            error = ex.Message;
-        }
-
+        catch (AssistantUnavailableException ex) { error = ex.Message; outage = true; }
+        catch (DomainException ex) { error = ex.Message; }
         timer.Stop();
         var duration = (int)timer.ElapsedMilliseconds;
-
         if (bill is null)
         {
-            // Every attempt is recorded, including the ones that fail.
             document.RecordFailure(error!);
-            history.Add(DocumentExtraction.Create(
-                organization.Id, document.Id, document.ExtractionAttempts, userId, settings.Model,
-                false, duration, 0, error, raw));
+            history.Add(DocumentExtraction.Create(organization.Id, document.Id, document.ExtractionAttempts,
+                userId, settings.Model, false, duration, 0, error, raw));
             await unitOfWork.SaveChangesAsync(cancellationToken);
-
             throw outage ? new AssistantUnavailableException(error!) : new DomainException(error!);
         }
 
         document.RecordExtraction(JsonSerializer.Serialize(bill, StoredJson));
-
-        var result = await review.BuildAsync(
-            document, organization, InvoiceLookups.Today(organization, clock), bill, cancellationToken);
-
-        history.Add(DocumentExtraction.Create(
-            organization.Id, document.Id, document.ExtractionAttempts, userId, settings.Model,
-            true, duration, result.Issues.Count, null, raw));
+        var result = await review.BuildAsync(document, organization, InvoiceLookups.Today(organization, clock), bill, cancellationToken);
+        history.Add(DocumentExtraction.Create(organization.Id, document.Id, document.ExtractionAttempts,
+            userId, settings.Model, true, duration, result.Issues.Count, null, raw));
         await unitOfWork.SaveChangesAsync(cancellationToken);
-
         return result;
     }
 
@@ -146,15 +123,75 @@ public sealed class ExtractDocumentHandler(
         {
             var text = document.ExtractedText ?? "";
             if (text.Length > MaxPromptChars) text = text[..MaxPromptChars];
-
             return new ExtractionRequest(ExtractionPrompts.System, ExtractionPrompts.Instructions, text, null, null);
         }
-
         var image = await storage.ReadAsync(document.Id, cancellationToken)
             ?? throw new NotFoundException("The document content is not available.");
+        return new ExtractionRequest(ExtractionPrompts.System, ExtractionPrompts.Instructions, null, image, document.ContentType);
+    }
+}
 
-        return new ExtractionRequest(
-            ExtractionPrompts.System, ExtractionPrompts.Instructions, null, image, document.ContentType);
+public sealed class PrepareFirebaseExtractionHandler(
+    IDocumentRepository documents, AssistantSettings settings, IPlanLimitChecker? planLimits = null)
+{
+    public async Task<FirebaseExtractionPreparationDto> Handle(Guid documentId, CancellationToken cancellationToken)
+    {
+        if (!settings.Enabled)
+            throw new AssistantUnavailableException("AI features are not enabled for this workspace.");
+
+        var document = await documents.GetByIdAsync(documentId, cancellationToken)
+            ?? throw new NotFoundException("Document not found.");
+        document.EnsureCanExtract();
+        if (planLimits is not null) await planLimits.EnsureAiExtractionCapacityAsync(cancellationToken);
+        if (document.Kind == DocumentKind.Pdf && !document.HasTextLayer)
+            throw new DomainException("This PDF has no readable text, so it may be a scan. Upload a photo or image of the invoice instead.");
+        return new FirebaseExtractionPreparationDto(settings.Model);
+    }
+}
+
+public sealed class SaveFirebaseExtractionHandler(
+    IDocumentRepository documents, IDocumentExtractionRepository history, ExtractionReviewBuilder review,
+    IOrganizationRepository organizations, IUnitOfWork unitOfWork, ICurrentOrganization currentOrganization,
+    ICurrentUser currentUser, AssistantSettings settings, TimeProvider clock, IPlanLimitChecker? planLimits = null)
+{
+    private const int MaxRawChars = 20_000;
+    private const int MaxLines = 200;
+    private const int MaxFieldChars = 500;
+    private static readonly JsonSerializerOptions StoredJson = new(JsonSerializerDefaults.Web);
+
+    public async Task<ExtractionReviewDto> Handle(
+        Guid documentId, FirebaseExtractedBillCommand command, CancellationToken cancellationToken)
+    {
+        if (!settings.Enabled)
+            throw new AssistantUnavailableException("AI features are not enabled for this workspace.");
+
+        var userId = currentUser.UserId ?? throw new AuthenticationFailedException("Not signed in.");
+        var organization = await InvoiceLookups.OrganizationAsync(organizations, currentOrganization, cancellationToken);
+        var document = await documents.GetByIdAsync(documentId, cancellationToken)
+            ?? throw new NotFoundException("Document not found.");
+
+        document.EnsureCanExtract();
+        if (planLimits is not null) await planLimits.EnsureAiExtractionCapacityAsync(cancellationToken);
+        if (command.Data is null) throw new DomainException("The AI did not return bill details. Please try again.");
+        if (command.Raw is { Length: > MaxRawChars }) throw new DomainException("The AI extraction response was too large.");
+
+        var bill = command.Data with { Lines = command.Data.Lines ?? [] };
+        if (bill.Lines.Count > MaxLines) throw new DomainException("This bill contains too many line items to review at once.");
+        if (new[] { bill.SupplierName, bill.SupplierTaxId, bill.InvoiceNumber, bill.Reference, bill.CurrencyCode }
+            .Any(value => value?.Length > MaxFieldChars))
+            throw new DomainException("The AI extraction included a field that is too long. Please try again.");
+        if (bill.CurrencyCode is { Length: > 3 })
+            throw new DomainException("The AI extraction returned an invalid currency code.");
+        if (bill.Lines.Any(line => line.Description?.Length > MaxFieldChars))
+            throw new DomainException("An extracted line description is too long. Please try again.");
+
+        document.RecordExtraction(JsonSerializer.Serialize(bill, StoredJson));
+        var result = await review.BuildAsync(document, organization, InvoiceLookups.Today(organization, clock), bill, cancellationToken);
+        history.Add(DocumentExtraction.Create(
+            organization.Id, document.Id, document.ExtractionAttempts, userId, settings.Model,
+            true, 0, result.Issues.Count, null, command.Raw));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return result;
     }
 }
 
@@ -174,7 +211,7 @@ public sealed class GetExtractionHandler(
         if (document.ExtractedData is null)
             throw new NotFoundException("This document has not been extracted yet.");
 
-        var bill = JsonSerializer.Deserialize<ExtractedBill>(document.ExtractedData, ExtractDocumentHandler.StoredJson)
+        var bill = JsonSerializer.Deserialize<ExtractedBill>(document.ExtractedData, new JsonSerializerOptions(JsonSerializerDefaults.Web))
             ?? throw new NotFoundException("This document has not been extracted yet.");
 
         return await review.BuildAsync(

@@ -313,12 +313,11 @@ public class AssistantSettingsTests
     [Fact]
     public void WhenSwitchedOn_ItNeedsAKey_AndSafeValues()
     {
-        Assert.Throws<InvalidOperationException>(() => new AssistantSettings { Enabled = true }.Validate());
         Assert.Throws<InvalidOperationException>(() => new AssistantSettings { Enabled = true, ApiKey = "k", Model = "../evil" }.Validate());
         Assert.Throws<InvalidOperationException>(() => new AssistantSettings { Enabled = true, ApiKey = "k", Thinking = "extreme" }.Validate());
         Assert.Throws<InvalidOperationException>(() => new AssistantSettings { Enabled = true, ApiKey = "k", MaxToolRounds = 20 }.Validate());
 
-        new AssistantSettings { Enabled = true, ApiKey = "k" }.Validate();
+        new AssistantSettings { Enabled = true }.Validate();
     }
 }
 

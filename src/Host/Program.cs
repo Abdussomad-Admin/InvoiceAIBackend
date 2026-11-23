@@ -117,6 +117,15 @@ builder.Services.AddRateLimiter(options =>
         Window = TimeSpan.FromHours(1)
     }));
 
+    // A Firebase AI Logic answer can need several read-only financial tool calls.
+    options.AddPolicy("assistant-tool", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        httpContext.User.FindFirst("sub")?.Value ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = assistantSettings.QuestionsPerHour * 12,
+            Window = TimeSpan.FromHours(1)
+        }));
+
     options.AddPolicy("upload", httpContext => RateLimitPartition.GetFixedWindowLimiter(
     httpContext.User.FindFirst("sub")?.Value ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
     _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
@@ -130,7 +139,8 @@ builder.Services.AddRateLimiter(options =>
 foreach (var type in typeof(Application.Auth.RegisterHandler).Assembly.GetTypes()
              .Where(t => t is { IsClass: true, IsAbstract: false }
                  && (t.Name.EndsWith("Handler", StringComparison.Ordinal)
-                     || t.Name.EndsWith("Handlers", StringComparison.Ordinal))))
+                     || t.Name.EndsWith("Handlers", StringComparison.Ordinal))
+                 && t.Name is not ("AskAssistantHandler" or "ExtractDocumentHandler")))
 {
     builder.Services.AddScoped(type);
 }

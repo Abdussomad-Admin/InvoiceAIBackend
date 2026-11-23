@@ -31,6 +31,10 @@ public sealed record ExtractionAttemptDto(
 public sealed record ExtractionRequest(
     string SystemPrompt, string Instructions, string? DocumentText, byte[]? Image, string? ImageContentType);
 
+public sealed record FirebaseExtractedBillCommand(ExtractedBill? Data, string? Raw);
+
+public sealed record FirebaseExtractionPreparationDto(string Model);
+
 public interface IDocumentExtractionModel
 {
     // Returns the model's raw text answer. Throws AssistantUnavailableException when the model cannot be reached.

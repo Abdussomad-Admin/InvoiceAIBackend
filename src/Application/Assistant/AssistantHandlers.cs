@@ -37,7 +37,71 @@ public sealed class ListAssistantToolsHandler(
         var allowed = await AssistantAccess.AllowedToolsAsync(
             tools, memberships, currentOrganization, currentUser, cancellationToken);
 
-        return allowed.Select(t => new AssistantToolInfoDto(t.Definition.Name, t.Definition.Description)).ToList();
+        return allowed.Select(t => new AssistantToolInfoDto(
+            t.Definition.Name, t.Definition.Description, t.Definition.Parameters)).ToList();
+    }
+}
+
+public sealed class StartAssistantSessionHandler(
+    IEnumerable<IAssistantTool> tools, IMembershipRepository memberships,
+    IOrganizationRepository organizations, ICurrentOrganization currentOrganization,
+    ICurrentUser currentUser, AssistantSettings settings, TimeProvider clock)
+{
+    public async Task<AssistantSessionDto> Handle(StartAssistantSessionCommand command, CancellationToken cancellationToken)
+    {
+        if (!settings.Enabled)
+            throw new AssistantUnavailableException("The assistant is not enabled for this workspace.");
+
+        var question = command.Question?.Trim();
+        if (string.IsNullOrWhiteSpace(question))
+            throw new DomainException("Ask a question.");
+        if (question.Length > settings.MaxQuestionLength)
+            throw new DomainException($"Keep the question under {settings.MaxQuestionLength} characters.");
+
+        var allowed = await AssistantAccess.AllowedToolsAsync(
+            tools, memberships, currentOrganization, currentUser, cancellationToken);
+        var organization = await InvoiceLookups.OrganizationAsync(organizations, currentOrganization, cancellationToken);
+        var today = InvoiceLookups.Today(organization, clock);
+
+        const string notice = "AI answers use the workspace records you can access. Check important figures before acting on them.";
+        return new AssistantSessionDto(
+            allowed.Select(t => new AssistantToolInfoDto(t.Definition.Name, t.Definition.Description, t.Definition.Parameters)).ToList(),
+            notice, settings.MaxToolRounds, today.ToString("yyyy-MM-dd"), organization.BaseCurrencyCode, organization.Name,
+            settings.Model);
+    }
+}
+
+public sealed class ExecuteAssistantToolHandler(
+    IEnumerable<IAssistantTool> tools, IMembershipRepository memberships,
+    ICurrentOrganization currentOrganization, ICurrentUser currentUser)
+{
+    private const int MaxResultChars = 30_000;
+    private static readonly JsonSerializerOptions ToolJson = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    public async Task<AssistantToolResultDto> Handle(
+        string name, ExecuteAssistantToolCommand command, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 64)
+            throw new DomainException("The requested financial tool is not valid.");
+        if (command.Arguments.ValueKind != JsonValueKind.Object)
+            throw new DomainException("Tool arguments must be a JSON object.");
+
+        var allowed = await AssistantAccess.AllowedToolsAsync(
+            tools, memberships, currentOrganization, currentUser, cancellationToken);
+        var tool = allowed.FirstOrDefault(candidate => candidate.Definition.Name == name)
+            ?? throw new ForbiddenException("This financial tool is not available to your account.");
+
+        var arguments = command.Arguments.EnumerateObject()
+            .ToDictionary(property => property.Name, property => property.Value, StringComparer.Ordinal);
+        var data = await tool.ExecuteAsync(arguments, cancellationToken);
+        var result = JsonSerializer.SerializeToElement(data, ToolJson);
+        if (result.GetRawText().Length > MaxResultChars)
+            throw new DomainException("The result was too large. Ask for a shorter period.");
+
+        return new AssistantToolResultDto(name, command.Arguments, result, true);
     }
 }
 

@@ -17,7 +17,8 @@ public class SupplierDocumentsController(
     GetDocumentHandler get,
     DownloadDocumentHandler download,
     RejectDocumentHandler reject,
-    ExtractDocumentHandler extract,
+    PrepareFirebaseExtractionHandler prepareFirebaseExtraction,
+    SaveFirebaseExtractionHandler saveFirebaseExtraction,
     GetExtractionHandler getExtraction,
     ListExtractionsHandler extractionHistory,
     ApproveDocumentHandler approve,
@@ -82,12 +83,20 @@ public class SupplierDocumentsController(
     public async Task<ActionResult<DocumentDto>> Reject(Guid id, RejectDocumentCommand command, CancellationToken ct)
         => Ok(await reject.Handle(id, command, ct));
 
-    // Sends the document's text or image to the configured AI model. Only happens when someone asks.
-    [HttpPost("{id:guid}/extract")]
+    // Verify the user's access and plan allowance before the browser sends this document to Firebase AI Logic.
+    [HttpPost("{id:guid}/extract/firebase/prepare")]
     [EnableRateLimiting("extract")]
     [Authorize(Policy = nameof(Permission.ManagePayables))]
-    public async Task<ActionResult<ExtractionReviewDto>> Extract(Guid id, CancellationToken ct)
-        => Ok(await extract.Handle(id, ct));
+    public async Task<ActionResult<FirebaseExtractionPreparationDto>> PrepareFirebaseExtraction(Guid id, CancellationToken ct)
+        => Ok(await prepareFirebaseExtraction.Handle(id, ct));
+
+    [HttpPost("{id:guid}/extract/firebase")]
+    [EnableRateLimiting("extract")]
+    [RequestSizeLimit(256 * 1024)]
+    [Authorize(Policy = nameof(Permission.ManagePayables))]
+    public async Task<ActionResult<ExtractionReviewDto>> SaveFirebaseExtraction(
+        Guid id, FirebaseExtractedBillCommand command, CancellationToken ct)
+        => Ok(await saveFirebaseExtraction.Handle(id, command, ct));
 
     [HttpGet("{id:guid}/extraction")]
     [Authorize(Policy = nameof(Permission.ViewPayables))]

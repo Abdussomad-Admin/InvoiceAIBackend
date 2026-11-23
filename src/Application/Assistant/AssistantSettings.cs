@@ -5,9 +5,10 @@ namespace Application.Assistant;
 public sealed class AssistantSettings
 {
     public bool Enabled { get; set; }
+    // Used only by dormant legacy model classes and their tests; production model calls use Firebase AI Logic.
     public string ApiKey { get; set; } = "";
-    public string Model { get; set; } = "gemma-4-26b-a4b-it";
-    public string Thinking { get; set; } = "minimal";   // "minimal" (off) or "high" (on)
+    public string Model { get; set; } = "gemini-3.8-flash";
+    public string Thinking { get; set; } = "minimal";
     public int TimeoutSeconds { get; set; } = 60;
     public int MaxToolRounds { get; set; } = 3;
     public int MaxQuestionLength { get; set; } = 500;
@@ -18,8 +19,6 @@ public sealed class AssistantSettings
     {
         if (!Enabled) return;
 
-        if (string.IsNullOrWhiteSpace(ApiKey))
-            throw new InvalidOperationException("Assistant:ApiKey is required when Assistant:Enabled is true.");
         if (!Regex.IsMatch(Model ?? "", "^[A-Za-z0-9._-]{1,80}$"))
             throw new InvalidOperationException("Assistant:Model contains characters that are not allowed.");
         if (Thinking is not ("minimal" or "high"))

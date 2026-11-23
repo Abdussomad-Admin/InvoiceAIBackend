@@ -90,7 +90,6 @@ public static class DependencyInjection
         services.AddScoped<IAssistantTool, ProfitOutlookTool>();
         services.AddScoped<IAssistantTool, OverdueInvoicesTool>();
         services.AddScoped<IAssistantTool, BillsDueTool>();
-        services.AddHttpClient<IAssistantModel, GemmaAssistantModel>();
 
         services.AddScoped<IDocumentRepository, DocumentRepository>();
         services.AddScoped<IDocumentStorage, DatabaseDocumentStorage>();
@@ -98,7 +97,6 @@ public static class DependencyInjection
 
         services.AddScoped<IDocumentExtractionRepository, DocumentExtractionRepository>();
         services.AddScoped<ExtractionReviewBuilder>();
-        services.AddHttpClient<IDocumentExtractionModel, GemmaDocumentExtractionModel>();
 
         emailSettings.Validate();
         services.AddSingleton(emailSettings);

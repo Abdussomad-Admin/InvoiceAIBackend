@@ -41,16 +41,14 @@ The opening balance includes issued invoices and payments before the start date.
   SHA-256 duplicate refusal).
 - Text is read from PDFs with PdfPig. Scanned PDFs are detected and flagged, but not extracted yet.
 - Extraction is an explicit action. Nothing is sent to an AI service at upload.
-- The AI answer goes through a strict parser and a validator. Confidence is computed from checks, not taken from
-  the model. Up to 5 attempts are kept per document.
+- The browser calls Firebase AI Logic with Gemini Developer API. The API validates the returned bill fields, checks supplier matches and duplicates, and computes confidence from validation checks rather than from the model. Up to 5 attempts are kept per document.
 - A person reviews and approves. Approval creates a **draft** bill only. The AI never creates a finalized record.
 
 **AI financial assistant**
-- `POST /api/assistant/ask` with eight read-only tools: financial summary, year comparison, expense report,
-  receivables aging, payables aging, 30-day cash-flow forecast, overdue invoices, and bills due.
-- Tools are filtered by the caller's role. The model never writes SQL and never calculates figures. Every answer
-  includes the verified source data so users can check it.
-- Off by default (`Assistant__Enabled=false`). Nothing is sent to Google until it is enabled with a key.
+- The browser calls Firebase AI Logic with Gemini Developer API. `POST /api/assistant/session` provides the allowed read-only tools, and `POST /api/assistant/tools/{toolName}` executes each selected tool for the signed-in member. Tools include financial summary, year comparison, expense report,
+  receivables aging, payables aging, 30-day cash-flow forecast, overdue invoices, bills due, and a clearly labeled profit outlook estimate.
+- Tools are filtered by the caller's role and checked again on each request. They are read-only and tenant-scoped; the model cannot write SQL or modify records. The API rate-limits assistant sessions and tool calls.
+- Off by default (`Assistant__Enabled=false`). The Gemini Developer API key is not stored in or sent by the Invoice AI backend; Firebase AI Logic and App Check handle the model request path.
 - Plain-language financial education and payment-safety rules remind users that unpaid invoices are not cash,
   profit is an estimate, and screenshots or SMS messages alone do not prove funds arrived.
 
@@ -89,7 +87,7 @@ but live provider flows and all client workflows still require deployment-level 
   refused. Permissions are loaded from the database on every request.
 - Concurrency: payments, bill payments and document approval lock the row (`SELECT ... FOR UPDATE`) inside a
   transaction. Invoice numbers come from an atomic upsert.
-- AI providers sit behind interfaces (`IAssistantModel`, `IDocumentExtractionModel`) so they can be replaced.
+- The production AI model path is Firebase AI Logic in the web app. The API handles authenticated, role-checked financial tools and validates document extraction results; it does not call Gemma or Gemini directly.
 
 ## Run locally
 
@@ -141,8 +139,8 @@ Settings come from `appsettings.json`, `appsettings.Development.json`, User Secr
 | `Database__MigrateOnStartup` | `true` applies migrations when the app starts |
 | `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | `true` when running behind a proxy such as Render |
 | `Swagger__Enabled` | `true` shows Swagger outside Development |
-| `Assistant__Enabled`, `Assistant__ApiKey`, `Assistant__Model` | Turn on the AI assistant and extraction |
-| `Assistant__Thinking`, `TimeoutSeconds`, `MaxToolRounds`, `MaxQuestionLength`, `QuestionsPerHour` | Assistant tuning |
+| `Assistant__Enabled`, `Assistant__Model` | Enable AI workflows and set the Firebase AI Logic model name recorded in extraction history |
+| `Assistant__MaxToolRounds`, `Assistant__MaxQuestionLength`, `Assistant__QuestionsPerHour` | Assistant limits |
 | `Documents__MaxStoredMegabytes` | Storage cap per organization |
 | `Paystack__Enabled`, `Paystack__SecretKey`, `Paystack__WebhookSecret` | Enable Paystack and provide test/live credentials outside source control |
 | `Billing__Plans__1__PaystackPlanCode` through `Billing__Plans__3__PaystackPlanCode` | Map Starter, Growth, and Business to plan codes created in the matching Paystack mode |
@@ -210,13 +208,10 @@ Render free tier caveats:
 
 ## AI and privacy
 
-- The AI model is Gemma through the Google Gemini API (`gemma-4-26b-a4b-it` by default), behind replaceable
-  interfaces. **The live calls have not yet been tested against the real service.** The scripted-model tests cover
-  the application logic, not Google's API.
-- The Gemini free tier may use submitted content to improve Google products. Check Google's current terms. Use dummy
-  data until a decision is made. Real client data needs a paid provider that does not train on it.
-- AI answers can be wrong. The assistant returns its source figures so users can check them. Extraction output is
-  never trusted until a person reviews and approves it.
+- The web app sends assistant prompts, authorized financial-tool results, and explicitly selected supplier-document content to Firebase AI Logic with the Gemini Developer API. The backend does not make the production model calls.
+- Firebase App Check protects Firebase AI Logic requests. It is separate from the API's JWT authentication, tenant isolation, role checks, and rate limits for financial data.
+- Review Google's current [Firebase AI Logic pricing and data-use terms](https://firebase.google.com/docs/ai-logic/pricing?api=dev) before processing real customer data. The Gemini Developer API's free and paid usage tiers have different data-use terms; configure the project for the tier appropriate to the business.
+- AI answers and extracted fields can be wrong. Tool results are returned so users can check figures; supplier-bill extraction remains a review step and never finalizes a bill.
 
 ## Known limitations
 
