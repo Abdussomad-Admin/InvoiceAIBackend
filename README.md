@@ -1,5 +1,7 @@
 # Invoice AI
 
+The React/Vite frontend is maintained in [Invoice-AI-Frontend](https://github.com/Abdussomad-Admin/Invoice-AI-Frontend). That repository includes a source snapshot of this backend under `backend-source/` for complete-project review. Both repositories use Apache 2.0.
+
 A backend for invoicing, accounts receivable, accounts payable, AI-assisted supplier invoice capture and financial
 reporting for small businesses. Built with ASP.NET Core (.NET 10), EF Core 10 and PostgreSQL.
 
