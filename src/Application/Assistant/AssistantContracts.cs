@@ -33,7 +33,8 @@ public sealed record AssistantToolInfoDto(string Name, string Description, IRead
 
 public sealed record AssistantSessionDto(
     IReadOnlyList<AssistantToolInfoDto> Tools, string Notice, int MaxToolRounds,
-    string Today, string BaseCurrencyCode, string BusinessName, string Model);
+    string Today, string BaseCurrencyCode, string BusinessName, string Model,
+    string UserName, string UserRole);
 
 public sealed record AssistantToolResultDto(string Tool, System.Text.Json.JsonElement Arguments,
     System.Text.Json.JsonElement Data, bool Succeeded);

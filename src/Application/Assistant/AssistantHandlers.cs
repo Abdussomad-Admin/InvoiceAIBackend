@@ -5,6 +5,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Invoices;
 using Application.Organizations;
+using Application.Users;
 using Domain.Common;
 using Domain.Organizations;
 
@@ -45,7 +46,7 @@ public sealed class ListAssistantToolsHandler(
 public sealed class StartAssistantSessionHandler(
     IEnumerable<IAssistantTool> tools, IMembershipRepository memberships,
     IOrganizationRepository organizations, ICurrentOrganization currentOrganization,
-    ICurrentUser currentUser, AssistantSettings settings, TimeProvider clock)
+    ICurrentUser currentUser, IUserRepository users, AssistantSettings settings, TimeProvider clock)
 {
     public async Task<AssistantSessionDto> Handle(StartAssistantSessionCommand command, CancellationToken cancellationToken)
     {
@@ -62,12 +63,18 @@ public sealed class StartAssistantSessionHandler(
             tools, memberships, currentOrganization, currentUser, cancellationToken);
         var organization = await InvoiceLookups.OrganizationAsync(organizations, currentOrganization, cancellationToken);
         var today = InvoiceLookups.Today(organization, clock);
+        var userId = currentUser.UserId ?? throw new AuthenticationFailedException("Not signed in.");
+        var user = await users.GetByIdAsync(userId, cancellationToken)
+            ?? throw new AuthenticationFailedException("Not signed in.");
+        var membership = await memberships.GetAsync(userId, organization.Id, cancellationToken)
+            ?? throw new ForbiddenException("You are not a member of this organization.");
+        var userRole = membership.Role == OrganizationRole.Owner ? "Administrator" : membership.Role.ToString();
 
         const string notice = "AI answers use the workspace records you can access. Check important figures before acting on them.";
         return new AssistantSessionDto(
             allowed.Select(t => new AssistantToolInfoDto(t.Definition.Name, t.Definition.Description, t.Definition.Parameters)).ToList(),
             notice, settings.MaxToolRounds, today.ToString("yyyy-MM-dd"), organization.BaseCurrencyCode, organization.Name,
-            settings.Model);
+            settings.Model, user.FullName, userRole);
     }
 }
 
